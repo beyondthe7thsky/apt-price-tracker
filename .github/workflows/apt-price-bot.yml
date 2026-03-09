@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       max_regions_per_run:
-        description: "한 번 실행 시 수집할 최대 동 수 (전체 실행: 49)"
+        description: "한 번 실행 시 수집할 최대 동 수 (전체 실행: 50)"
         required: false
-        default: "49"
+        default: "50"
       commit_data:
         description: "data/apt-listings.json 변경분 자동 커밋 여부"
         required: false
@@ -55,7 +55,7 @@ jobs:
 
       - name: Run bot
         env:
-          BOT_SAFE_MAX_REGIONS_PER_RUN: ${{ github.event.inputs.max_regions_per_run || '49' }}
+          BOT_SAFE_MAX_REGIONS_PER_RUN: ${{ github.event.inputs.max_regions_per_run || '50' }}
         run: ./gradlew --no-daemon clean bootRun
 
       - name: Commit updated data

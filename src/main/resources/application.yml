@@ -5,7 +5,7 @@ spring:
 bot:
   enabled: true
   safe:
-    max-regions-per-run: 49
+    max-regions-per-run: 50
     region-delay-min-ms: 3000
     region-delay-max-ms: 7000
 

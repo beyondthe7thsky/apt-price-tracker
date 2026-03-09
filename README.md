@@ -6,7 +6,7 @@
 
 ## 기능
 
-- 대상 동(현재 49개) 순회 수집
+- 대상 동(현재 50개) 순회 수집
 - 20~39평 필터링
 - 이전 실행 데이터와 비교해서 신규/가격하락 감지
 - Teams Webhook 알림 전송
@@ -50,7 +50,7 @@ export TEAMS_WEBHOOK_URL="https://outlook.office.com/webhook/..."
 설정 파일: `src/main/resources/application.yml`
 
 - `bot.enabled`: 봇 실행 여부 (기본 `true`)
-- `bot.safe.max-regions-per-run`: 한 번에 수집할 최대 동 수 (기본 `49`)
+- `bot.safe.max-regions-per-run`: 한 번에 수집할 최대 동 수 (기본 `50`)
 - `bot.safe.region-delay-min-ms`
 - `bot.safe.region-delay-max-ms`
 - `naver.safe.*`: 요청 재시도, 백오프, 타임아웃, 쿨다운 관련 설정
@@ -61,7 +61,7 @@ export TEAMS_WEBHOOK_URL="https://outlook.office.com/webhook/..."
 
 - 평일 KST 09:00 자동 실행
 - 수동 실행 지원 (`workflow_dispatch`)
-- 기본값은 전체 동 수집 (`max_regions_per_run=49`)
+- 기본값은 전체 동 수집 (`max_regions_per_run=50`)
 - `commit_data=true`면 `data/apt-listings.json` 변경분 자동 커밋
 
 현재 러너 조건:

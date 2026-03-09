@@ -221,7 +221,8 @@ jobs:
               .chip.s-bargain{background:#ffe4e6;color:#9f1239;border-color:#fecdd3}
               .chip.s-cheap{background:#ecfeff;color:#155e75;border-color:#a5f3fc}
               .chip.s-normal{background:#f8fafc;color:#475569;border-color:#cbd5e1}
-              table{width:100%;border-collapse:collapse;font-size:13px}
+              .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+              table{width:100%;min-width:980px;border-collapse:collapse;font-size:13px}
               th,td{border-bottom:1px solid #edf1f7;padding:8px 10px;text-align:left;vertical-align:top}
               th{background:#f8fafc;color:#475569}
               td.price{font-weight:800;white-space:nowrap}
@@ -237,7 +238,28 @@ jobs:
               .empty{background:#fff;border:1px dashed #cbd5e1;border-radius:12px;padding:24px;color:#64748b;text-align:center}
               a{color:#1f6feb;text-decoration:none} a:hover{text-decoration:underline}
               @media (max-width:1280px){.toolbar{grid-template-columns:repeat(4,minmax(0,1fr))}.stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
-              @media (max-width:840px){.toolbar{grid-template-columns:repeat(2,minmax(0,1fr))}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+              @media (max-width:900px){
+                body{padding:12px}
+                h1{font-size:24px}
+                .meta{font-size:13px}
+                .legend{font-size:12px}
+                .toolbar{grid-template-columns:1fr;padding:10px}
+                .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+                .stat{padding:10px}
+                .stat .v{font-size:18px}
+                .head{flex-direction:column;align-items:flex-start}
+                .table-wrap{overflow-x:visible}
+                table{min-width:0}
+                table, thead, tbody, tr, th, td{display:block;width:100%}
+                thead{display:none}
+                tbody{padding:8px}
+                tr{background:#fff;border:1px solid #e5eaf3;border-radius:12px;padding:8px;margin-bottom:10px}
+                td{display:flex;gap:10px;justify-content:space-between;align-items:flex-start;border:0;border-bottom:1px dashed #edf1f7;padding:6px 2px;white-space:normal}
+                td:last-child{border-bottom:0}
+                td::before{content:attr(data-label);min-width:84px;flex:0 0 84px;color:#64748b;font-weight:700}
+                td.price{white-space:normal}
+                td.dim{white-space:normal}
+              }
             </style>
           </head>
           <body>
@@ -308,9 +330,9 @@ jobs:
                   const countNormal=items.filter(x=>x.signal==='보통').length;
                   const chips=`<span class="chip city">${esc(city)}</span><span class="chip s-bargain">급매 ${countBargain}</span><span class="chip s-cheap">저렴 ${countCheap}</span><span class="chip s-normal">보통 ${countNormal}</span>`;
 
-                  const rowsHtml=items.map(it=>`<tr><td>${esc(it.city)}</td><td>${esc(it.title)}</td><td class="price">${esc(it.priceText)}</td><td>${esc(it.avgPriceText)}</td><td class="${diffClass(it.diffPct)}">${esc(diffText(it.diffPct))}</td><td><span class="badge ${signalClass(it.signal)}">${esc(it.signal)}</span></td><td><span class="badge ${statusClass(it.statusLabel)}">${esc(it.statusLabel)}</span></td><td class="dim">${esc(it.pyeong)}평 / ${esc(it.floor)}</td><td><a href="${esc(it.url)}" target="_blank">상세보기</a></td><td><a href="${esc(mapUrl(it))}" target="_blank">지도</a></td></tr>`).join('');
+                  const rowsHtml=items.map(it=>`<tr><td data-label="도시">${esc(it.city)}</td><td data-label="단지/매물">${esc(it.title)}</td><td data-label="매물가" class="price">${esc(it.priceText)}</td><td data-label="단지 평균가">${esc(it.avgPriceText)}</td><td data-label="평균대비" class="${diffClass(it.diffPct)}">${esc(diffText(it.diffPct))}</td><td data-label="판단"><span class="badge ${signalClass(it.signal)}">${esc(it.signal)}</span></td><td data-label="상태"><span class="badge ${statusClass(it.statusLabel)}">${esc(it.statusLabel)}</span></td><td data-label="평형/층" class="dim">${esc(it.pyeong)}평 / ${esc(it.floor)}</td><td data-label="매물"><a href="${esc(it.url)}" target="_blank">상세보기</a></td><td data-label="지도"><a href="${esc(mapUrl(it))}" target="_blank">지도</a></td></tr>`).join('');
 
-                  return `<section class="region" style="--accent:${accent};"><div class="head"><div class="title">${esc(name)} <span style="color:#64748b;font-size:13px;">(${items.length}건)</span></div><div class="chips">${chips}</div></div><table><thead><tr><th>도시</th><th>단지/매물</th><th>매물가</th><th>단지 평균가</th><th>평균대비</th><th>판단</th><th>상태</th><th>평형/층</th><th>매물</th><th>지도</th></tr></thead><tbody>${rowsHtml}</tbody></table></section>`;
+                  return `<section class="region" style="--accent:${accent};"><div class="head"><div class="title">${esc(name)} <span style="color:#64748b;font-size:13px;">(${items.length}건)</span></div><div class="chips">${chips}</div></div><div class="table-wrap"><table><thead><tr><th>도시</th><th>단지/매물</th><th>매물가</th><th>단지 평균가</th><th>평균대비</th><th>판단</th><th>상태</th><th>평형/층</th><th>매물</th><th>지도</th></tr></thead><tbody>${rowsHtml}</tbody></table></div></section>`;
                 }).join('');
               }
 

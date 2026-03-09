@@ -21,7 +21,7 @@ class BotRunner(
     private val naverService: NaverService, // 서비스 교체
     private val repository: FileDataRepository,
     private val notifier: TeamsNotifierService,
-    @Value("\${bot.safe.max-regions-per-run:49}") private val maxRegionsPerRun: Int,
+    @Value("\${bot.safe.max-regions-per-run:50}") private val maxRegionsPerRun: Int,
     @Value("\${bot.safe.region-delay-min-ms:3000}") private val regionDelayMinMs: Long,
     @Value("\${bot.safe.region-delay-max-ms:7000}") private val regionDelayMaxMs: Long,
     @Value("\${bot.market.off-market-confirm-miss-count:3}") private val offMarketConfirmMissCount: Int,
@@ -39,6 +39,7 @@ class BotRunner(
             mapOf("name" to "수원_이의동", "code" to "4111710300"),
             mapOf("name" to "수원_하동", "code" to "4111710400"),
             mapOf("name" to "수원_화서동", "code" to "4111513800"),
+            mapOf("name" to "수원_천천동", "code" to "4111113300"),
 
             // 2) 용인시 수지구
             mapOf("name" to "용인수지_풍덕천동", "code" to "4146510100"),
