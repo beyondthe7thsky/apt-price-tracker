@@ -134,10 +134,13 @@ jobs:
                   return "30평대"
               return "기타"
 
+          BARGAIN_THRESHOLD_PCT = -10.0
+          CHEAP_THRESHOLD_PCT = -5.0
+
           def price_signal(diff_pct):
-              if diff_pct <= -10.0:
+              if diff_pct <= BARGAIN_THRESHOLD_PCT:
                   return "급매"
-              if diff_pct <= -5.0:
+              if diff_pct <= CHEAP_THRESHOLD_PCT:
                   return "저렴"
               return "보통"
 
@@ -202,6 +205,7 @@ jobs:
               .wrap{max-width:1440px;margin:0 auto}
               h1{margin:0 0 6px;font-size:30px;letter-spacing:-.02em}
               .meta{color:var(--muted);margin:0 0 14px}
+              .legend{margin:-6px 0 14px;padding:10px 12px;border:1px solid #d8e2f0;border-radius:10px;background:#f8fbff;color:#334155;font-size:13px}
               .toolbar{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;box-shadow:var(--shadow)}
               .toolbar input,.toolbar select,.toolbar button{border:1px solid #cfd8e6;border-radius:10px;padding:10px 12px;font-size:14px;background:#fff}
               .toolbar button{cursor:pointer;background:#0f172a;color:#fff;border-color:#0f172a;font-weight:700}
@@ -240,6 +244,7 @@ jobs:
             <div class=\"wrap\">
               <h1>오늘의 아파트 매물 리포트</h1>
               <div class=\"meta\">기준시각: __RUN_LABEL__ / 노출 매물 __TOTAL__건 / 필터: __FILTER__</div>
+              <div class=\"legend\">평균대비 = (매물가 - 단지평균가) / 단지평균가 × 100 · 급매: __BARGAIN_TH__% 이하 · 저렴: __CHEAP_TH__% 이하</div>
 
               <div class=\"toolbar\">
                 <select id=\"city\"></select>
@@ -328,6 +333,8 @@ jobs:
               .replace("__TOTAL__", str(len(report_rows)))
               .replace("__FILTER__", html.escape(region_filter) if region_filter else "없음")
               .replace("__RUN_LABEL__", run_label)
+              .replace("__BARGAIN_TH__", str(BARGAIN_THRESHOLD_PCT))
+              .replace("__CHEAP_TH__", str(CHEAP_THRESHOLD_PCT))
               .replace("__RELISTED__", str(status_counts["RELISTED"]))
               .replace("__CANDIDATE__", str(status_counts["OFF_MARKET_CANDIDATE"]))
               .replace("__OFFMARKET__", str(status_counts["OFF_MARKET"]))
@@ -443,6 +450,9 @@ jobs:
                   owner, repo = repository.split("/", 1)
                   page_url = f"https://{owner}.github.io/{repo}/"
 
+          bargain_threshold = "-10.0%"
+          cheap_threshold = "-5.0%"
+
           payload = {
               "type": "message",
               "attachments": [
@@ -463,22 +473,86 @@ jobs:
                               },
                               {
                                   "type": "TextBlock",
-                                  "text": "매물 상세는 웹 리포트에서 확인하세요.",
+                                  "text": "핵심 요약만 전달합니다. 상세 매물은 웹 리포트에서 확인하세요.",
                                   "isSubtle": True,
                                   "spacing": "Small",
                                   "wrap": True,
                               },
                               {
+                                  "type": "Container",
+                                  "style": "emphasis",
+                                  "bleed": True,
+                                  "spacing": "Medium",
+                                  "items": [
+                                      {
+                                          "type": "ColumnSet",
+                                          "columns": [
+                                              {
+                                                  "type": "Column",
+                                                  "width": "stretch",
+                                                  "items": [
+                                                      {"type": "TextBlock", "text": total_count, "weight": "Bolder", "size": "Medium", "horizontalAlignment": "Center"},
+                                                      {"type": "TextBlock", "text": "노출 매물", "isSubtle": True, "spacing": "None", "horizontalAlignment": "Center"}
+                                                  ]
+                                              },
+                                              {
+                                                  "type": "Column",
+                                                  "width": "stretch",
+                                                  "items": [
+                                                      {"type": "TextBlock", "text": bargain_count, "weight": "Bolder", "size": "Medium", "horizontalAlignment": "Center"},
+                                                      {"type": "TextBlock", "text": "급매", "isSubtle": True, "spacing": "None", "horizontalAlignment": "Center"}
+                                                  ]
+                                              },
+                                              {
+                                                  "type": "Column",
+                                                  "width": "stretch",
+                                                  "items": [
+                                                      {"type": "TextBlock", "text": cheap_count, "weight": "Bolder", "size": "Medium", "horizontalAlignment": "Center"},
+                                                      {"type": "TextBlock", "text": "저렴", "isSubtle": True, "spacing": "None", "horizontalAlignment": "Center"}
+                                                  ]
+                                              },
+                                              {
+                                                  "type": "Column",
+                                                  "width": "stretch",
+                                                  "items": [
+                                                      {"type": "TextBlock", "text": relisted_count, "weight": "Bolder", "size": "Medium", "horizontalAlignment": "Center"},
+                                                      {"type": "TextBlock", "text": "재등록", "isSubtle": True, "spacing": "None", "horizontalAlignment": "Center"}
+                                                  ]
+                                              }
+                                          ]
+                                      },
+                                      {
+                                          "type": "ColumnSet",
+                                          "spacing": "Small",
+                                          "columns": [
+                                              {
+                                                  "type": "Column",
+                                                  "width": "stretch",
+                                                  "items": [
+                                                      {"type": "TextBlock", "text": candidate_count, "weight": "Bolder", "size": "Medium", "horizontalAlignment": "Center"},
+                                                      {"type": "TextBlock", "text": "소진후보", "isSubtle": True, "spacing": "None", "horizontalAlignment": "Center"}
+                                                  ]
+                                              },
+                                              {
+                                                  "type": "Column",
+                                                  "width": "stretch",
+                                                  "items": [
+                                                      {"type": "TextBlock", "text": off_market_count, "weight": "Bolder", "size": "Medium", "horizontalAlignment": "Center"},
+                                                      {"type": "TextBlock", "text": "소진추정", "isSubtle": True, "spacing": "None", "horizontalAlignment": "Center"}
+                                                  ]
+                                              }
+                                          ]
+                                      }
+                                  ]
+                              },
+                              {
                                   "type": "FactSet",
+                                  "spacing": "Medium",
                                   "facts": [
                                       {"title": "기준시각", "value": run_label},
-                                      {"title": "노출 매물", "value": f"{total_count}건"},
-                                      {"title": "재등록", "value": f"{relisted_count}건"},
-                                      {"title": "소진후보", "value": f"{candidate_count}건"},
-                                      {"title": "소진추정", "value": f"{off_market_count}건"},
-                                      {"title": "급매", "value": f"{bargain_count}건"},
-                                      {"title": "저렴", "value": f"{cheap_count}건"},
                                       {"title": "필터", "value": region_filter},
+                                      {"title": "급매/저렴 기준", "value": f"{bargain_threshold} / {cheap_threshold}"},
+                                      {"title": "평균대비", "value": "(매물가-단지평균가)/단지평균가"},
                                   ],
                               },
                           ],
