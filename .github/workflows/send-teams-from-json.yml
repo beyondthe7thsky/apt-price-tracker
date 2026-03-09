@@ -362,6 +362,18 @@ jobs:
           print("generated pages/index.html")
           PY
 
+      - name: Ensure Pages archive tools (self-hosted macOS)
+        shell: bash
+        run: |
+          if ! command -v gtar >/dev/null 2>&1; then
+            brew install gnu-tar
+          fi
+          if ! command -v zstd >/dev/null 2>&1; then
+            brew install zstd
+          fi
+          echo "gtar: $(command -v gtar)"
+          echo "zstd: $(command -v zstd)"
+
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
