@@ -21,9 +21,13 @@ on:
 
 jobs:
   run:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, ARM64]
     permissions:
       contents: write
+    timeout-minutes: 180
+    concurrency:
+      group: apt-price-bot
+      cancel-in-progress: false
 
     steps:
       - name: Checkout

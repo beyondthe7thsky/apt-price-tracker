@@ -147,7 +147,6 @@ class BotRunner(
         }
 
         repository.saveAll(updatedListings)
-        log.info("=== 모든 작업 완료. 준성님, 이제 이 코드는 진짜입니다. ===")
     }
 
     private fun normalizedDelayRange(minMs: Long, maxMs: Long, defaultMinMs: Long, defaultMaxMs: Long): Pair<Long, Long> {
