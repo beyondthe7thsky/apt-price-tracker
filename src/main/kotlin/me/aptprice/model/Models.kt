@@ -4,6 +4,7 @@ import java.time.LocalDateTime
 
 data class Listing(
     val articleNo: String,
+    val hscpNo: String = "",
     val title: String,
     val regionName: String,
     val price: Long,

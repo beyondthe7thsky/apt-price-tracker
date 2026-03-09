@@ -16,6 +16,7 @@ import kotlin.math.roundToInt
 import kotlin.random.Random
 
 class AbuseBlockedException(message: String) : RuntimeException(message)
+class RegionFetchFailedException(message: String) : RuntimeException(message)
 
 @Service
 class NaverService(private val objectMapper: ObjectMapper) {
@@ -37,23 +38,23 @@ class NaverService(private val objectMapper: ObjectMapper) {
     @Value("\${naver.safe.max-complex-pages:1}")
     private var maxComplexPages: Int = 1
 
-    @Value("\${naver.safe.max-complexes-per-region:8}")
-    private var maxComplexesPerRegion: Int = 8
+    @Value("\${naver.safe.max-complexes-per-region:50}")
+    private var maxComplexesPerRegion: Int = 50
 
-    @Value("\${naver.safe.complex-delay-min-ms:4000}")
-    private var complexDelayMinMs: Long = 4_000L
+    @Value("\${naver.safe.complex-delay-min-ms:700}")
+    private var complexDelayMinMs: Long = 700L
 
-    @Value("\${naver.safe.complex-delay-max-ms:9000}")
-    private var complexDelayMaxMs: Long = 9_000L
+    @Value("\${naver.safe.complex-delay-max-ms:1500}")
+    private var complexDelayMaxMs: Long = 1_500L
 
-    @Value("\${naver.safe.page-delay-min-ms:1500}")
-    private var pageDelayMinMs: Long = 1_500L
+    @Value("\${naver.safe.page-delay-min-ms:300}")
+    private var pageDelayMinMs: Long = 300L
 
-    @Value("\${naver.safe.page-delay-max-ms:3500}")
-    private var pageDelayMaxMs: Long = 3_500L
+    @Value("\${naver.safe.page-delay-max-ms:900}")
+    private var pageDelayMaxMs: Long = 900L
 
-    @Value("\${naver.safe.request-timeout-ms:30000}")
-    private var requestTimeoutMs: Long = 30_000L
+    @Value("\${naver.safe.request-timeout-ms:20000}")
+    private var requestTimeoutMs: Long = 20_000L
 
     @Value("\${naver.safe.abuse-cooldown-minutes:30}")
     private var abuseCooldownMinutes: Long = 30L
@@ -96,7 +97,13 @@ class NaverService(private val objectMapper: ObjectMapper) {
             .groupBy { it.articleNo }
             .mapNotNull { (_, items) -> items.maxByOrNull { it.updatedAt } }
 
-        log.info("{} 수집 성공 - 단지: {}개, 매물: {}건", regionName, complexes.size, deduped.size)
+        log.info(
+            "{} 수집 성공 - 단지 전체: {}개, 수집 대상 단지: {}개, 매물: {}건",
+            regionName,
+            complexes.size,
+            runComplexes.size,
+            deduped.size
+        )
         return deduped
     }
 
@@ -107,17 +114,15 @@ class NaverService(private val objectMapper: ObjectMapper) {
             throw AbuseBlockedException("${regionName} 단지 목록 조회가 abuse 차단으로 중단됨")
         }
         if (response.timedOut) {
-            log.warn("{} 단지 목록 조회 타임아웃으로 스킵합니다.", regionName)
-            return emptyList()
+            throw RegionFetchFailedException("${regionName} 단지 목록 조회 타임아웃")
         }
-        val body = response.body ?: return emptyList()
+        val body = response.body ?: throw RegionFetchFailedException("${regionName} 단지 목록 응답 없음")
 
         val root = runCatching { objectMapper.readTree(body) }.getOrElse {
-            log.error("{} 단지 목록 파싱 실패: {}", regionName, it.message)
-            return emptyList()
+            throw RegionFetchFailedException("${regionName} 단지 목록 파싱 실패: ${it.message}")
         }
 
-        val result = root.get("result") ?: return emptyList()
+        val result = root.get("result") ?: throw RegionFetchFailedException("${regionName} 단지 목록 result 필드 없음")
         return result.mapNotNull { node ->
             val hscpNo = node.get("hscpNo")?.asText()?.trim().orEmpty()
             val hscpNm = node.get("hscpNm")?.asText()?.trim().orEmpty()
@@ -181,6 +186,7 @@ class NaverService(private val objectMapper: ObjectMapper) {
 
         return Listing(
             articleNo = articleNo,
+            hscpNo = complex.hscpNo,
             title = title,
             regionName = regionName,
             price = parsedPrice,

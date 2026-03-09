@@ -4,6 +4,7 @@ import me.aptprice.model.Listing
 import me.aptprice.repository.FileDataRepository
 import me.aptprice.service.AbuseBlockedException
 import me.aptprice.service.NaverService
+import me.aptprice.service.RegionFetchFailedException
 import me.aptprice.service.TeamsNotifierService
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -19,8 +20,8 @@ class BotRunner(
     private val repository: FileDataRepository,
     private val notifier: TeamsNotifierService,
     @Value("\${bot.safe.max-regions-per-run:49}") private val maxRegionsPerRun: Int,
-    @Value("\${bot.safe.region-delay-min-ms:20000}") private val regionDelayMinMs: Long,
-    @Value("\${bot.safe.region-delay-max-ms:60000}") private val regionDelayMaxMs: Long,
+    @Value("\${bot.safe.region-delay-min-ms:3000}") private val regionDelayMinMs: Long,
+    @Value("\${bot.safe.region-delay-max-ms:7000}") private val regionDelayMaxMs: Long,
 ) : CommandLineRunner {
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -99,37 +100,49 @@ class BotRunner(
 
         val oldData = repository.loadAll()
         val allNewListings = mutableListOf<Listing>()
+        val successfulRegions = mutableSetOf<String>()
         var blockedByAbuse = false
 
         for ((index, region) in runRegions.withIndex()) {
+            val regionName = region["name"]!!
             val listings = try {
-                naverService.fetchListings(region["name"]!!, region["code"]!!)
+                naverService.fetchListings(regionName, region["code"]!!)
             } catch (e: AbuseBlockedException) {
                 blockedByAbuse = true
-                log.warn("{} 수집 중단: {}", region["name"], e.message)
+                log.warn("{} 수집 중단: {}", regionName, e.message)
                 break
+            } catch (e: RegionFetchFailedException) {
+                log.warn("{} 수집 실패(기존 데이터 유지): {}", regionName, e.message)
+                continue
             }
+            successfulRegions.add(regionName)
 
             // 20~39평형만 필터링
             val filtered = listings.filter { it.pyeong in 20..39 }
             allNewListings.addAll(filtered)
 
             if (index < runRegions.lastIndex) {
-                val delayRange = normalizedDelayRange(regionDelayMinMs, regionDelayMaxMs, 20_000L, 60_000L)
+                val delayRange = normalizedDelayRange(regionDelayMinMs, regionDelayMaxMs, 3_000L, 7_000L)
                 val delayMillis = random.nextLong(delayRange.first, delayRange.second + 1)
                 log.info("다음 지역 수집 전 {}ms 대기", delayMillis)
                 Thread.sleep(delayMillis)
             }
         }
 
-        if (allNewListings.isEmpty()) {
+        if (successfulRegions.isEmpty()) {
             if (blockedByAbuse) {
-                log.warn("abuse 차단으로 신규 수집 결과가 없습니다. 기존 JSON 데이터는 유지합니다.")
+                log.warn("abuse 차단으로 성공한 지역이 없어 기존 JSON 데이터를 유지합니다.")
             } else {
-                log.warn("수집 결과가 없어 기존 JSON 데이터는 유지합니다.")
+                log.warn("성공한 지역이 없어 기존 JSON 데이터를 유지합니다.")
             }
             return
         }
+
+        // 이번 실행에 성공한 지역만 최신 데이터로 교체하고, 실패/미수집 지역 데이터는 보존합니다.
+        val preservedOld = oldData.values.filter { it.regionName !in successfulRegions }
+        val mergedListings = (preservedOld + allNewListings)
+            .groupBy { it.articleNo }
+            .mapNotNull { (_, items) -> items.maxByOrNull { it.updatedAt } }
 
         val notifyList = mutableListOf<Pair<Listing, String>>()
         val updatedListings = allNewListings.map { newListing ->
@@ -146,7 +159,14 @@ class BotRunner(
             notifier.sendGroupedNotification(notifyList)
         }
 
-        repository.saveAll(updatedListings)
+        repository.saveAll(mergedListings)
+        log.info(
+            "저장 완료 - 성공 지역: {}개, 보존 지역: {}개, 신규 수집: {}건, 최종 저장: {}건",
+            successfulRegions.size,
+            (runRegions.size - successfulRegions.size).coerceAtLeast(0),
+            updatedListings.size,
+            mergedListings.size
+        )
     }
 
     private fun normalizedDelayRange(minMs: Long, maxMs: Long, defaultMinMs: Long, defaultMaxMs: Long): Pair<Long, Long> {
