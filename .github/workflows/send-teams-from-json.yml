@@ -70,13 +70,37 @@ jobs:
               man = p % 10_000
               return f"{eok}억" if man == 0 else f"{eok}억 {man}만"
 
+          def normalize_status(v):
+              s = str(v or "ACTIVE").strip().upper()
+              valid = {"ACTIVE", "RELISTED", "OFF_MARKET_CANDIDATE", "OFF_MARKET"}
+              return s if s in valid else "ACTIVE"
+
+          def status_label(status):
+              return {
+                  "ACTIVE": "활성",
+                  "RELISTED": "재등록",
+                  "OFF_MARKET_CANDIDATE": "소진후보",
+                  "OFF_MARKET": "소진추정",
+              }.get(status, "활성")
+
           listings = [x for x in data if isinstance(x, dict)]
           if region_filter:
               listings = [x for x in listings if region_filter in str(x.get("regionName", ""))]
 
-          # 기존 정책 유지: 20~39평
           listings = [x for x in listings if 20 <= as_int(x.get("pyeong", 0), 0) <= 39]
-          listings.sort(key=lambda x: str(x.get("updatedAt", "")), reverse=True)
+
+          status_counts = {
+              "ACTIVE": 0,
+              "RELISTED": 0,
+              "OFF_MARKET_CANDIDATE": 0,
+              "OFF_MARKET": 0,
+          }
+          for it in listings:
+              status_counts[normalize_status(it.get("status"))] += 1
+
+          live_statuses = {"ACTIVE", "RELISTED"}
+          live_listings = [x for x in listings if normalize_status(x.get("status")) in live_statuses]
+          live_listings.sort(key=lambda x: str(x.get("updatedAt", "")), reverse=True)
 
           def complex_key(item):
               region = str(item.get("regionName", "")).strip()
@@ -85,7 +109,7 @@ jobs:
               return f"{region}::{hscp_no or title}"
 
           complex_price_map = {}
-          for it in listings:
+          for it in live_listings:
               key = complex_key(it)
               p = as_int(it.get("price", 0), 0)
               if p <= 0:
@@ -121,10 +145,9 @@ jobs:
           bargain_count = 0
           cheap_count = 0
 
-          for it in listings:
+          for it in live_listings:
               region = str(it.get("regionName", ""))
               city = region.split("_", 1)[0] if "_" in region else region
-              dong = region.split("_", 1)[1] if "_" in region else region
 
               price = as_int(it.get("price", 0), 0)
               pyeong = as_int(it.get("pyeong", 0), 0)
@@ -139,11 +162,11 @@ jobs:
               elif signal == "저렴":
                   cheap_count += 1
 
+              status = normalize_status(it.get("status"))
               report_rows.append(
                   {
                       "city": city,
                       "region": region,
-                      "dong": dong,
                       "title": str(it.get("title", "")),
                       "price": price,
                       "priceText": format_price(price),
@@ -151,6 +174,8 @@ jobs:
                       "avgPriceText": format_price(avg_price) if avg_price > 0 else "-",
                       "diffPct": round(diff_pct, 2),
                       "signal": signal,
+                      "status": status,
+                      "statusLabel": status_label(status),
                       "priceBand": price_band_label(price),
                       "pyeong": pyeong,
                       "pyeongBand": pyeong_band_label(pyeong),
@@ -180,7 +205,7 @@ jobs:
               .toolbar{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;box-shadow:var(--shadow)}
               .toolbar input,.toolbar select,.toolbar button{border:1px solid #cfd8e6;border-radius:10px;padding:10px 12px;font-size:14px;background:#fff}
               .toolbar button{cursor:pointer;background:#0f172a;color:#fff;border-color:#0f172a;font-weight:700}
-              .stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:14px 0}
+              .stats{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;margin:14px 0}
               .stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;box-shadow:var(--shadow)}
               .stat .k{font-size:12px;color:var(--muted)} .stat .v{font-size:20px;font-weight:800}
               .region{--accent:#475569;background:var(--card);border:1px solid var(--line);border-left:6px solid var(--accent);border-radius:14px;margin-bottom:12px;overflow:hidden;box-shadow:var(--shadow)}
@@ -201,6 +226,8 @@ jobs:
               .b-bargain{background:#ffe4e6;color:#9f1239;border-color:#fecdd3}
               .b-cheap{background:#ecfeff;color:#155e75;border-color:#a5f3fc}
               .b-normal{background:#f8fafc;color:#475569;border-color:#cbd5e1}
+              .status-active{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}
+              .status-relisted{background:#f0fdf4;color:#166534;border-color:#bbf7d0}
               .diff-neg{color:#16a34a;font-weight:700}
               .diff-pos{color:#dc2626;font-weight:700}
               .empty{background:#fff;border:1px dashed #cbd5e1;border-radius:12px;padding:24px;color:#64748b;text-align:center}
@@ -211,8 +238,8 @@ jobs:
           </head>
           <body>
             <div class=\"wrap\">
-              <h1>오늘의 매물 리포트</h1>
-              <div class=\"meta\">기준시각: __RUN_LABEL__ / 총 __TOTAL__건 / 필터: __FILTER__</div>
+              <h1>오늘의 아파트 매물 리포트</h1>
+              <div class=\"meta\">기준시각: __RUN_LABEL__ / 노출 매물 __TOTAL__건 / 필터: __FILTER__</div>
 
               <div class=\"toolbar\">
                 <select id=\"city\"></select>
@@ -220,17 +247,19 @@ jobs:
                 <select id=\"priceBand\"><option value=\"\">가격대(전체)</option><option>8억 미만</option><option>8~9억대</option><option>9~10억대</option><option>10~12억대</option><option>12억 이상</option></select>
                 <select id=\"pyeongBand\"><option value=\"\">평형(전체)</option><option>20평대</option><option>30평대</option></select>
                 <select id=\"signal\"><option value=\"\">판단(전체)</option><option>급매</option><option>저렴</option><option>보통</option></select>
-                <select id=\"sortBy\"><option value=\"discount_desc\">정렬: 급매 우선</option><option value=\"price_desc\">정렬: 가격 높은순</option><option value=\"price_asc\">정렬: 가격 낮은순</option><option value=\"updated_desc\">정렬: 최신순</option><option value=\"region_asc\">정렬: 지역 가나다</option></select>
+                <select id=\"status\"><option value=\"\">상태(전체)</option><option>활성</option><option>재등록</option></select>
                 <input id=\"q\" placeholder=\"지역/단지명 검색\"/>
                 <button id=\"resetBtn\">필터 초기화</button>
               </div>
 
               <div class=\"stats\">
-                <div class=\"stat\"><div class=\"k\">필터 결과</div><div class=\"v\" id=\"sTotal\">0</div></div>
+                <div class=\"stat\"><div class=\"k\">노출 매물</div><div class=\"v\" id=\"sTotal\">0</div></div>
                 <div class=\"stat\"><div class=\"k\">지역 수</div><div class=\"v\" id=\"sRegions\">0</div></div>
                 <div class=\"stat\"><div class=\"k\">급매</div><div class=\"v\" id=\"sBargain\">0</div></div>
                 <div class=\"stat\"><div class=\"k\">저렴</div><div class=\"v\" id=\"sCheap\">0</div></div>
-                <div class=\"stat\"><div class=\"k\">평균가 이하 비율</div><div class=\"v\" id=\"sBelow\">0%</div></div>
+                <div class=\"stat\"><div class=\"k\">재등록</div><div class=\"v\" id=\"sRelisted\">__RELISTED__</div></div>
+                <div class=\"stat\"><div class=\"k\">소진후보</div><div class=\"v\">__CANDIDATE__</div></div>
+                <div class=\"stat\"><div class=\"k\">소진추정</div><div class=\"v\">__OFFMARKET__</div></div>
               </div>
 
               <div id=\"regions\"></div>
@@ -238,19 +267,20 @@ jobs:
 
             <script>
               const RAW = __DATA__;
-              const cityEl=document.getElementById('city'),regionEl=document.getElementById('region'),priceEl=document.getElementById('priceBand'),pyeongEl=document.getElementById('pyeongBand'),signalEl=document.getElementById('signal'),sortEl=document.getElementById('sortBy'),qEl=document.getElementById('q'),regionsEl=document.getElementById('regions');
+              const cityEl=document.getElementById('city'),regionEl=document.getElementById('region'),priceEl=document.getElementById('priceBand'),pyeongEl=document.getElementById('pyeongBand'),signalEl=document.getElementById('signal'),statusEl=document.getElementById('status'),qEl=document.getElementById('q'),regionsEl=document.getElementById('regions');
               const resetBtn=document.getElementById('resetBtn');
-              const sTotal=document.getElementById('sTotal'),sRegions=document.getElementById('sRegions'),sBargain=document.getElementById('sBargain'),sCheap=document.getElementById('sCheap'),sBelow=document.getElementById('sBelow');
+              const sTotal=document.getElementById('sTotal'),sRegions=document.getElementById('sRegions'),sBargain=document.getElementById('sBargain'),sCheap=document.getElementById('sCheap');
               const CITY_COLOR={"수원":"#2563eb","용인수지":"#0f766e","서울양천":"#9333ea","서울강서":"#0284c7","서울영등포":"#0891b2","서울동작":"#dc2626","서울관악":"#ea580c","서울구로":"#16a34a","서울금천":"#ca8a04","서울성동":"#4f46e5","서울마포":"#7c3aed","서울용산":"#be123c","서울은평":"#0d9488","서울강동":"#1d4ed8","서울동대문":"#c2410c","서울광진":"#7e22ce","서울서대문":"#0f766e","서울성북":"#475569"};
               const esc=(s)=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
               const uniq=(a)=>Array.from(new Set(a)).sort((x,y)=>String(x).localeCompare(String(y),'ko'));
               const mapUrl=(row)=>`https://map.naver.com/p/search/${encodeURIComponent(`${row.region} ${row.title}`)}`;
               const signalClass=(v)=>v==='급매'?'b-bargain':(v==='저렴'?'b-cheap':'b-normal');
+              const statusClass=(v)=>v==='재등록'?'status-relisted':'status-active';
               function cityColor(city){ if(CITY_COLOR[city]) return CITY_COLOR[city]; const palette=["#2563eb","#0f766e","#9333ea","#0284c7","#dc2626","#16a34a","#ea580c"]; let h=0; for(const c of city) h=(h*31+c.charCodeAt(0))>>>0; return palette[h%palette.length]; }
               function fillCities(){const c=uniq(RAW.map(x=>x.city));cityEl.innerHTML=`<option value="">도시(전체)</option>`+c.map(v=>`<option>${esc(v)}</option>`).join('');}
               function fillRegions(){const city=cityEl.value;const src=city?RAW.filter(x=>x.city===city):RAW;const r=uniq(src.map(x=>x.region));const prev=regionEl.value;regionEl.innerHTML=`<option value="">지역(전체)</option>`+r.map(v=>`<option>${esc(v)}</option>`).join('');if(r.includes(prev))regionEl.value=prev;}
-              function filtered(){const city=cityEl.value,region=regionEl.value,priceBand=priceEl.value,pyeongBand=pyeongEl.value,signal=signalEl.value,q=qEl.value.trim().toLowerCase();return RAW.filter(x=>{if(city&&x.city!==city)return false;if(region&&x.region!==region)return false;if(priceBand&&x.priceBand!==priceBand)return false;if(pyeongBand&&x.pyeongBand!==pyeongBand)return false;if(signal&&x.signal!==signal)return false;if(q&&!`${x.region} ${x.title}`.toLowerCase().includes(q))return false;return true;});}
-              function sortRows(rows){const v=sortEl.value;const arr=[...rows];arr.sort((a,b)=>{if(v==='price_desc')return Number(b.price)-Number(a.price);if(v==='price_asc')return Number(a.price)-Number(b.price);if(v==='updated_desc')return String(b.updatedAt).localeCompare(String(a.updatedAt));if(v==='region_asc'){const rc=String(a.region).localeCompare(String(b.region),'ko');return rc!==0?rc:Number(b.price)-Number(a.price);}return Number(a.diffPct)-Number(b.diffPct)||Number(b.price)-Number(a.price);});return arr;}
+              function filtered(){const city=cityEl.value,region=regionEl.value,priceBand=priceEl.value,pyeongBand=pyeongEl.value,signal=signalEl.value,status=statusEl.value,q=qEl.value.trim().toLowerCase();return RAW.filter(x=>{if(city&&x.city!==city)return false;if(region&&x.region!==region)return false;if(priceBand&&x.priceBand!==priceBand)return false;if(pyeongBand&&x.pyeongBand!==pyeongBand)return false;if(signal&&x.signal!==signal)return false;if(status&&x.statusLabel!==status)return false;if(q&&!`${x.region} ${x.title}`.toLowerCase().includes(q))return false;return true;});}
+              function sortRows(rows){const arr=[...rows];arr.sort((a,b)=>Number(a.diffPct)-Number(b.diffPct)||Number(b.price)-Number(a.price));return arr;}
               function diffText(v){const n=Number(v||0);const sign=n>0?'+':'';return `${sign}${n.toFixed(1)}%`;}
               function diffClass(v){return Number(v)<=0?'diff-neg':'diff-pos';}
               function render(){
@@ -262,7 +292,6 @@ jobs:
                 sRegions.textContent=String(g.size);
                 sBargain.textContent=String(rows.filter(x=>x.signal==='급매').length);
                 sCheap.textContent=String(rows.filter(x=>x.signal==='저렴').length);
-                sBelow.textContent=rows.length?`${((rows.filter(x=>Number(x.diffPct)<=0).length/rows.length)*100).toFixed(1)}%`:'0%';
 
                 if(!rows.length){regionsEl.innerHTML='<div class="empty">조건에 맞는 데이터가 없습니다.</div>';return;}
 
@@ -274,16 +303,16 @@ jobs:
                   const countNormal=items.filter(x=>x.signal==='보통').length;
                   const chips=`<span class="chip city">${esc(city)}</span><span class="chip s-bargain">급매 ${countBargain}</span><span class="chip s-cheap">저렴 ${countCheap}</span><span class="chip s-normal">보통 ${countNormal}</span>`;
 
-                  const rowsHtml=items.map(it=>`<tr><td>${esc(it.city)}</td><td>${esc(it.title)}</td><td class="price">${esc(it.priceText)}</td><td>${esc(it.avgPriceText)}</td><td class="${diffClass(it.diffPct)}">${esc(diffText(it.diffPct))}</td><td><span class="badge ${signalClass(it.signal)}">${esc(it.signal)}</span></td><td class="dim">${esc(it.pyeong)}평 / ${esc(it.floor)}</td><td><a href="${esc(it.url)}" target="_blank">상세보기</a></td><td><a href="${esc(mapUrl(it))}" target="_blank">지도</a></td></tr>`).join('');
+                  const rowsHtml=items.map(it=>`<tr><td>${esc(it.city)}</td><td>${esc(it.title)}</td><td class="price">${esc(it.priceText)}</td><td>${esc(it.avgPriceText)}</td><td class="${diffClass(it.diffPct)}">${esc(diffText(it.diffPct))}</td><td><span class="badge ${signalClass(it.signal)}">${esc(it.signal)}</span></td><td><span class="badge ${statusClass(it.statusLabel)}">${esc(it.statusLabel)}</span></td><td class="dim">${esc(it.pyeong)}평 / ${esc(it.floor)}</td><td><a href="${esc(it.url)}" target="_blank">상세보기</a></td><td><a href="${esc(mapUrl(it))}" target="_blank">지도</a></td></tr>`).join('');
 
-                  return `<section class="region" style="--accent:${accent};"><div class="head"><div class="title">${esc(name)} <span style="color:#64748b;font-size:13px;">(${items.length}건)</span></div><div class="chips">${chips}</div></div><table><thead><tr><th>도시</th><th>단지/매물</th><th>매물가</th><th>단지 평균가</th><th>평균대비</th><th>판단</th><th>평형/층</th><th>매물</th><th>지도</th></tr></thead><tbody>${rowsHtml}</tbody></table></section>`;
+                  return `<section class="region" style="--accent:${accent};"><div class="head"><div class="title">${esc(name)} <span style="color:#64748b;font-size:13px;">(${items.length}건)</span></div><div class="chips">${chips}</div></div><table><thead><tr><th>도시</th><th>단지/매물</th><th>매물가</th><th>단지 평균가</th><th>평균대비</th><th>판단</th><th>상태</th><th>평형/층</th><th>매물</th><th>지도</th></tr></thead><tbody>${rowsHtml}</tbody></table></section>`;
                 }).join('');
               }
 
               cityEl.addEventListener('change',()=>{fillRegions();render();});
-              [regionEl,priceEl,pyeongEl,signalEl,sortEl].forEach(el=>el.addEventListener('change',render));
+              [regionEl,priceEl,pyeongEl,signalEl,statusEl].forEach(el=>el.addEventListener('change',render));
               qEl.addEventListener('input',render);
-              resetBtn.addEventListener('click',()=>{cityEl.value='';fillRegions();regionEl.value='';priceEl.value='';pyeongEl.value='';signalEl.value='';sortEl.value='discount_desc';qEl.value='';render();});
+              resetBtn.addEventListener('click',()=>{cityEl.value='';fillRegions();regionEl.value='';priceEl.value='';pyeongEl.value='';signalEl.value='';statusEl.value='';qEl.value='';render();});
 
               fillCities();
               fillRegions();
@@ -299,6 +328,9 @@ jobs:
               .replace("__TOTAL__", str(len(report_rows)))
               .replace("__FILTER__", html.escape(region_filter) if region_filter else "없음")
               .replace("__RUN_LABEL__", run_label)
+              .replace("__RELISTED__", str(status_counts["RELISTED"]))
+              .replace("__CANDIDATE__", str(status_counts["OFF_MARKET_CANDIDATE"]))
+              .replace("__OFFMARKET__", str(status_counts["OFF_MARKET"]))
           )
 
           out_dir = pathlib.Path("pages")
@@ -311,9 +343,22 @@ jobs:
                   fo.write(f"total_count={len(report_rows)}\n")
                   fo.write(f"bargain_count={bargain_count}\n")
                   fo.write(f"cheap_count={cheap_count}\n")
+                  fo.write(f"relisted_count={status_counts['RELISTED']}\n")
+                  fo.write(f"off_market_candidate_count={status_counts['OFF_MARKET_CANDIDATE']}\n")
+                  fo.write(f"off_market_count={status_counts['OFF_MARKET']}\n")
                   fo.write(f"run_label={run_label}\n")
 
-          print(f"report rows={len(report_rows)}, bargain={bargain_count}, cheap={cheap_count}")
+          print(
+              "report rows=%s, bargain=%s, cheap=%s, relisted=%s, candidate=%s, off_market=%s"
+              % (
+                  len(report_rows),
+                  bargain_count,
+                  cheap_count,
+                  status_counts["RELISTED"],
+                  status_counts["OFF_MARKET_CANDIDATE"],
+                  status_counts["OFF_MARKET"],
+              )
+          )
           print("generated pages/index.html")
           PY
 
@@ -374,6 +419,9 @@ jobs:
           total_count = os.getenv("TOTAL_COUNT", "0")
           bargain_count = os.getenv("BARGAIN_COUNT", "0")
           cheap_count = os.getenv("CHEAP_COUNT", "0")
+          relisted_count = os.getenv("RELISTED_COUNT", "0")
+          candidate_count = os.getenv("OFF_MARKET_CANDIDATE_COUNT", "0")
+          off_market_count = os.getenv("OFF_MARKET_COUNT", "0")
           run_label = os.getenv("RUN_LABEL", "")
           region_filter = (os.getenv("REGION_FILTER") or "").strip() or "없음"
 
@@ -403,7 +451,7 @@ jobs:
                               },
                               {
                                   "type": "TextBlock",
-                                  "text": "상세 매물 리스트는 웹 리포트에서 확인하세요.",
+                                  "text": "매물 상세는 웹 리포트에서 확인하세요.",
                                   "isSubtle": True,
                                   "spacing": "Small",
                                   "wrap": True,
@@ -412,7 +460,10 @@ jobs:
                                   "type": "FactSet",
                                   "facts": [
                                       {"title": "기준시각", "value": run_label},
-                                      {"title": "총 매물", "value": f"{total_count}건"},
+                                      {"title": "노출 매물", "value": f"{total_count}건"},
+                                      {"title": "재등록", "value": f"{relisted_count}건"},
+                                      {"title": "소진후보", "value": f"{candidate_count}건"},
+                                      {"title": "소진추정", "value": f"{off_market_count}건"},
                                       {"title": "급매", "value": f"{bargain_count}건"},
                                       {"title": "저렴", "value": f"{cheap_count}건"},
                                       {"title": "필터", "value": region_filter},
