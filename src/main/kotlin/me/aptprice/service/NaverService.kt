@@ -84,8 +84,8 @@ class NaverService(private val objectMapper: ObjectMapper) {
             listings.addAll(articleResult.listings)
 
             if (articleResult.blockedByAbuse) {
-                log.warn("{} 지역 수집 중 abuse 차단이 감지되어 남은 단지 수집을 중단합니다.", regionName)
-                break
+                log.warn("{} 지역 수집 중 abuse 차단이 감지되어 이번 지역 결과를 폐기하고 수집을 중단합니다.", regionName)
+                throw AbuseBlockedException("${regionName} 지역 수집 중 abuse 차단 감지")
             }
 
             if (index < runComplexes.lastIndex) {
