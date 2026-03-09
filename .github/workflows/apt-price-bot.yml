@@ -36,6 +36,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -61,12 +63,34 @@ jobs:
       - name: Commit updated data
         if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.commit_data != 'false') }}
         run: |
+          BRANCH="${GITHUB_REF_NAME:-main}"
+
           if [[ -n "$(git status --porcelain data/apt-listings.json)" ]]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add data/apt-listings.json
             git commit -m "chore: update apt listings [skip ci]"
-            git push
+
+            pushed="false"
+            for attempt in 1 2 3; do
+              if git push origin "HEAD:${BRANCH}"; then
+                pushed="true"
+                break
+              fi
+
+              echo "Push rejected (attempt ${attempt}/3). Fetch + rebase and retry..."
+              git fetch origin "${BRANCH}"
+              if ! git rebase "origin/${BRANCH}"; then
+                git rebase --abort || true
+                echo "Rebase failed. Manual intervention required."
+                exit 1
+              fi
+            done
+
+            if [[ "${pushed}" != "true" ]]; then
+              echo "Push failed after retries."
+              exit 1
+            fi
           else
             echo "No data changes to commit."
           fi
