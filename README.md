@@ -11,7 +11,7 @@
 
 ## 핵심 기능
 
-- 대상 지역(현재 69개 동) 순회 수집
+- 대상 지역(현재 70개 동) 순회 수집
 - 20~39평 매물만 저장
 - 매물 상태 라이프사이클 관리
   - `ACTIVE` (활성)
@@ -43,7 +43,8 @@
 
 파일: `.github/workflows/apt-price-bot.yml`
 
-- 평일 KST 오전 9시 자동 실행 (`cron`)
+- 평일 KST 08:30 자동 실행 (1차, 35개 동)
+- 평일 KST 11:30 자동 실행 (2차, 35개 동)
 - 수동 실행 가능 (`workflow_dispatch`)
 - 실행 후 `data/apt-listings.json` 변경 시 자동 커밋
 
@@ -51,7 +52,8 @@
 
 파일: `.github/workflows/send-teams-from-json.yml`
 
-- `run` 워크플로우 성공 후 자동 실행
+- 평일 KST 13:00 자동 실행 (`cron`)
+- 수동 실행 가능 (`workflow_dispatch`)
 - `pages/index.html` 생성 후 GitHub Pages 배포
 - Teams에 요약 카드 1건 전송 (웹 리포트 링크 포함)
 
@@ -70,10 +72,13 @@
 파일: `src/main/resources/application.yml`
 
 - `bot.safe.max-regions-per-run`: 기본 `0` (전체 동 실행)
+- `bot.safe.rotate-start-by-day`: 기본 `true` (매일 시작 동 순환)
+- `bot.safe.start-region-offset`: 추가 시작 오프셋
 - `bot.market.off-market-confirm-miss-count`: 소진추정 전환 임계치
 - `naver.safe.abuse-cooldown-minutes`: abuse 감지 후 쿨다운(기본 `30`분)
 - `naver.safe.request-timeout-ms`: 요청 타임아웃
 - `naver.safe.max-complexes-per-region`: 지역별 단지 수집 상한
+- `naver.safe.rotate-complexes-by-day`: 단지 상한 적용 시 일자별 수집 단지 순환
 
 ## 로컬 실행
 

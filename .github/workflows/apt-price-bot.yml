@@ -2,12 +2,18 @@ name: run
 
 on:
   schedule:
-    # UTC 00:00 = KST 09:00 (평일)
-    - cron: "0 0 * * 1-5"
+    # KST 08:30 (평일) = UTC 23:30 (일~목)
+    - cron: "30 23 * * 0-4"
+    # KST 11:30 (평일) = UTC 02:30 (월~금)
+    - cron: "30 2 * * 1-5"
   workflow_dispatch:
     inputs:
       max_regions_per_run:
-        description: "한 번 실행 시 수집할 최대 동 수 (기본 0=전체 실행, 현재 전체: 69)"
+        description: "수동 실행 시 수집할 최대 동 수 (기본 0=전체 실행)"
+        required: false
+        default: "0"
+      start_region_offset:
+        description: "수동 실행 시 시작 동 오프셋 (기본 0)"
         required: false
         default: "0"
       commit_data:
@@ -32,6 +38,10 @@ jobs:
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
       JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8
+      EVENT_NAME: ${{ github.event_name }}
+      EVENT_SCHEDULE: ${{ github.event.schedule || '' }}
+      INPUT_MAX_REGIONS: ${{ github.event.inputs.max_regions_per_run || '' }}
+      INPUT_START_OFFSET: ${{ github.event.inputs.start_region_offset || '' }}
 
     steps:
       - name: Checkout
@@ -53,9 +63,38 @@ jobs:
           locale
           echo "JAVA_TOOL_OPTIONS=${JAVA_TOOL_OPTIONS}"
 
+      - name: Resolve run config
+        run: |
+          if [[ "${EVENT_NAME}" == "schedule" ]]; then
+            case "${EVENT_SCHEDULE}" in
+              "30 23 * * 0-4")
+                run_max="35"
+                run_offset="0"
+                ;;
+              "30 2 * * 1-5")
+                run_max="35"
+                run_offset="35"
+                ;;
+              *)
+                run_max="35"
+                run_offset="0"
+                ;;
+            esac
+          else
+            run_max="${INPUT_MAX_REGIONS:-0}"
+            run_offset="${INPUT_START_OFFSET:-0}"
+          fi
+
+          echo "RUN_MAX_REGIONS=${run_max}" >> "$GITHUB_ENV"
+          echo "RUN_START_OFFSET=${run_offset}" >> "$GITHUB_ENV"
+          echo "RUN_ROTATE_BY_DAY=true" >> "$GITHUB_ENV"
+          echo "Resolved config: max=${run_max}, offset=${run_offset}, schedule=${EVENT_SCHEDULE}"
+
       - name: Run bot
         env:
-          BOT_SAFE_MAX_REGIONS_PER_RUN: ${{ github.event.inputs.max_regions_per_run || '0' }}
+          BOT_SAFE_MAX_REGIONS_PER_RUN: ${{ env.RUN_MAX_REGIONS }}
+          BOT_SAFE_START_REGION_OFFSET: ${{ env.RUN_START_OFFSET }}
+          BOT_SAFE_ROTATE_START_BY_DAY: ${{ env.RUN_ROTATE_BY_DAY }}
         run: ./gradlew --no-daemon clean bootRun
 
       - name: Commit updated data

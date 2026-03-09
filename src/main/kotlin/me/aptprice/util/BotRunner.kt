@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.CommandLineRunner
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.stereotype.Component
+import java.time.LocalDate
 import java.time.LocalDateTime
 import kotlin.random.Random
 
@@ -22,6 +23,8 @@ class BotRunner(
     private val repository: FileDataRepository,
     private val notifier: TeamsNotifierService,
     @Value("\${bot.safe.max-regions-per-run:0}") private val maxRegionsPerRun: Int,
+    @Value("\${bot.safe.rotate-start-by-day:true}") private val rotateStartByDay: Boolean,
+    @Value("\${bot.safe.start-region-offset:0}") private val startRegionOffset: Int,
     @Value("\${bot.safe.region-delay-min-ms:5000}") private val regionDelayMinMs: Long,
     @Value("\${bot.safe.region-delay-max-ms:9000}") private val regionDelayMaxMs: Long,
     @Value("\${bot.market.off-market-confirm-miss-count:3}") private val offMarketConfirmMissCount: Int,
@@ -92,6 +95,7 @@ class BotRunner(
             mapOf("name" to "서울동대문_답십리동", "code" to "1123010500"),
             mapOf("name" to "서울동대문_장안동", "code" to "1123010600"),
             mapOf("name" to "서울동대문_청량리동", "code" to "1123010700"),
+            mapOf("name" to "서울동대문_회기동", "code" to "1123010800"),
             mapOf("name" to "서울동대문_휘경동", "code" to "1123010900"),
             mapOf("name" to "서울동대문_이문동", "code" to "1123011000"),
             mapOf("name" to "서울성북_길음동", "code" to "1129013400"),
@@ -114,15 +118,30 @@ class BotRunner(
             mapOf("name" to "서울은평_응암동", "code" to "1138010700")
         )
 
-        val runRegions = when {
-            maxRegionsPerRun <= 0 -> targetRegions
-            maxRegionsPerRun >= targetRegions.size -> targetRegions
-            else -> targetRegions.take(maxRegionsPerRun)
+        val totalRegions = targetRegions.size
+        val baseOffset = if (rotateStartByDay && totalRegions > 0) LocalDate.now().dayOfYear % totalRegions else 0
+        val effectiveOffset = if (totalRegions > 0) {
+            ((baseOffset + startRegionOffset) % totalRegions + totalRegions) % totalRegions
+        } else {
+            0
         }
+        val orderedRegions = if (effectiveOffset == 0) {
+            targetRegions
+        } else {
+            targetRegions.drop(effectiveOffset) + targetRegions.take(effectiveOffset)
+        }
+
+        val runLimit = when {
+            maxRegionsPerRun <= 0 -> totalRegions
+            maxRegionsPerRun >= totalRegions -> totalRegions
+            else -> maxRegionsPerRun
+        }
+        val runRegions = orderedRegions.take(runLimit)
         log.info(
-            "=== [네이버 모바일] 결혼 준비용 매물 감시 가동 (전체: {}개 동, 이번 실행: {}개 동) ===",
-            targetRegions.size,
-            runRegions.size
+            "=== [네이버 모바일] 결혼 준비용 매물 감시 가동 (전체: {}개 동, 이번 실행: {}개 동, 시작 오프셋: {}) ===",
+            totalRegions,
+            runRegions.size,
+            effectiveOffset
         )
 
         val oldData = repository.loadAll()

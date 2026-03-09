@@ -6,6 +6,8 @@ bot:
   enabled: true
   safe:
     max-regions-per-run: 0
+    rotate-start-by-day: true
+    start-region-offset: 0
     region-delay-min-ms: 5000
     region-delay-max-ms: 9000
 
@@ -16,6 +18,7 @@ naver:
     backoff-jitter-ms: 1500
     max-complex-pages: 1
     max-complexes-per-region: 35
+    rotate-complexes-by-day: true
     complex-delay-min-ms: 1200
     complex-delay-max-ms: 2600
     page-delay-min-ms: 600

@@ -12,6 +12,7 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.net.http.HttpTimeoutException
 import java.time.Duration
+import java.time.LocalDate
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
@@ -40,6 +41,9 @@ class NaverService(private val objectMapper: ObjectMapper) {
 
     @Value("\${naver.safe.max-complexes-per-region:35}")
     private var maxComplexesPerRegion: Int = 35
+
+    @Value("\${naver.safe.rotate-complexes-by-day:true}")
+    private var rotateComplexesByDay: Boolean = true
 
     @Value("\${naver.safe.complex-delay-min-ms:1200}")
     private var complexDelayMinMs: Long = 1_200L
@@ -77,7 +81,7 @@ class NaverService(private val objectMapper: ObjectMapper) {
             return emptyList()
         }
 
-        val runComplexes = complexes.take(maxComplexesPerRegion.coerceAtLeast(1))
+        val runComplexes = selectRunComplexes(regionName, complexes)
         val listings = mutableListOf<Listing>()
         for ((index, complex) in runComplexes.withIndex()) {
             val articleResult = fetchComplexArticles(regionName, complex)
@@ -137,6 +141,25 @@ class NaverService(private val objectMapper: ObjectMapper) {
             if (hscpTypeCd != "A01") return@mapNotNull null // 아파트만 수집
             ComplexInfo(hscpNo = hscpNo, hscpNm = hscpNm, hsehCnt = householdCount)
         }
+    }
+
+    private fun selectRunComplexes(regionName: String, complexes: List<ComplexInfo>): List<ComplexInfo> {
+        if (complexes.isEmpty()) return emptyList()
+
+        val limit = maxComplexesPerRegion
+        if (limit <= 0 || limit >= complexes.size) {
+            return complexes
+        }
+
+        if (!rotateComplexesByDay) {
+            return complexes.take(limit)
+        }
+
+        val dayOffset = LocalDate.now().dayOfYear
+        val regionOffset = regionName.hashCode().let { if (it == Int.MIN_VALUE) 0 else kotlin.math.abs(it) }
+        val start = (dayOffset + regionOffset) % complexes.size
+        val rotated = complexes.drop(start) + complexes.take(start)
+        return rotated.take(limit)
     }
 
     private fun fetchComplexArticles(regionName: String, complex: ComplexInfo): ArticleFetchResult {
