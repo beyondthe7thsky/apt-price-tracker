@@ -171,6 +171,7 @@ jobs:
                       "city": city,
                       "region": region,
                       "title": str(it.get("title", "")),
+                      "hsehCnt": as_int(it.get("hsehCnt", 0), 0),
                       "price": price,
                       "priceText": format_price(price),
                       "avgPrice": avg_price,
@@ -206,7 +207,7 @@ jobs:
               h1{margin:0 0 6px;font-size:30px;letter-spacing:-.02em}
               .meta{color:var(--muted);margin:0 0 14px}
               .legend{margin:-6px 0 14px;padding:10px 12px;border:1px solid #d8e2f0;border-radius:10px;background:#f8fbff;color:#334155;font-size:13px}
-              .toolbar{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;box-shadow:var(--shadow)}
+              .toolbar{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:10px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;box-shadow:var(--shadow)}
               .toolbar input,.toolbar select,.toolbar button{border:1px solid #cfd8e6;border-radius:10px;padding:10px 12px;font-size:14px;background:#fff}
               .toolbar button{cursor:pointer;background:#0f172a;color:#fff;border-color:#0f172a;font-weight:700}
               .stats{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;margin:14px 0}
@@ -222,7 +223,7 @@ jobs:
               .chip.s-cheap{background:#ecfeff;color:#155e75;border-color:#a5f3fc}
               .chip.s-normal{background:#f8fafc;color:#475569;border-color:#cbd5e1}
               .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-              table{width:100%;min-width:980px;border-collapse:collapse;font-size:13px}
+              table{width:100%;min-width:1120px;border-collapse:collapse;font-size:13px}
               th,td{border-bottom:1px solid #edf1f7;padding:8px 10px;text-align:left;vertical-align:top}
               th{background:#f8fafc;color:#475569}
               td.price{font-weight:800;white-space:nowrap}
@@ -273,6 +274,7 @@ jobs:
                 <select id=\"region\"></select>
                 <select id=\"priceBand\"><option value=\"\">가격대(전체)</option><option>8억 미만</option><option>8~9억대</option><option>9~10억대</option><option>10~12억대</option><option>12억 이상</option></select>
                 <select id=\"pyeongBand\"><option value=\"\">평형(전체)</option><option>20평대</option><option>30평대</option></select>
+                <select id=\"householdBand\"><option value=\"\">세대수(전체)</option><option value=\"le300\">300세대 이하</option><option value=\"ge300\">300세대 이상</option><option value=\"ge500\">500세대 이상</option><option value=\"ge700\">700세대 이상</option><option value=\"ge7000\">7000세대 이상</option></select>
                 <select id=\"signal\"><option value=\"\">판단(전체)</option><option>급매</option><option>저렴</option><option>보통</option></select>
                 <select id=\"status\"><option value=\"\">상태(전체)</option><option>활성</option><option>재등록</option></select>
                 <input id=\"q\" placeholder=\"지역/단지명 검색\"/>
@@ -294,7 +296,7 @@ jobs:
 
             <script>
               const RAW = __DATA__;
-              const cityEl=document.getElementById('city'),regionEl=document.getElementById('region'),priceEl=document.getElementById('priceBand'),pyeongEl=document.getElementById('pyeongBand'),signalEl=document.getElementById('signal'),statusEl=document.getElementById('status'),qEl=document.getElementById('q'),regionsEl=document.getElementById('regions');
+              const cityEl=document.getElementById('city'),regionEl=document.getElementById('region'),priceEl=document.getElementById('priceBand'),pyeongEl=document.getElementById('pyeongBand'),householdEl=document.getElementById('householdBand'),signalEl=document.getElementById('signal'),statusEl=document.getElementById('status'),qEl=document.getElementById('q'),regionsEl=document.getElementById('regions');
               const resetBtn=document.getElementById('resetBtn');
               const sTotal=document.getElementById('sTotal'),sRegions=document.getElementById('sRegions'),sBargain=document.getElementById('sBargain'),sCheap=document.getElementById('sCheap');
               const CITY_COLOR={"수원":"#2563eb","용인수지":"#0f766e","서울양천":"#9333ea","서울강서":"#0284c7","서울영등포":"#0891b2","서울동작":"#dc2626","서울관악":"#ea580c","서울구로":"#16a34a","서울금천":"#ca8a04","서울성동":"#4f46e5","서울마포":"#7c3aed","서울용산":"#be123c","서울은평":"#0d9488","서울강동":"#1d4ed8","서울동대문":"#c2410c","서울광진":"#7e22ce","서울서대문":"#0f766e","서울성북":"#475569"};
@@ -306,7 +308,18 @@ jobs:
               function cityColor(city){ if(CITY_COLOR[city]) return CITY_COLOR[city]; const palette=["#2563eb","#0f766e","#9333ea","#0284c7","#dc2626","#16a34a","#ea580c"]; let h=0; for(const c of city) h=(h*31+c.charCodeAt(0))>>>0; return palette[h%palette.length]; }
               function fillCities(){const c=uniq(RAW.map(x=>x.city));cityEl.innerHTML=`<option value="">도시(전체)</option>`+c.map(v=>`<option>${esc(v)}</option>`).join('');}
               function fillRegions(){const city=cityEl.value;const src=city?RAW.filter(x=>x.city===city):RAW;const r=uniq(src.map(x=>x.region));const prev=regionEl.value;regionEl.innerHTML=`<option value="">지역(전체)</option>`+r.map(v=>`<option>${esc(v)}</option>`).join('');if(r.includes(prev))regionEl.value=prev;}
-              function filtered(){const city=cityEl.value,region=regionEl.value,priceBand=priceEl.value,pyeongBand=pyeongEl.value,signal=signalEl.value,status=statusEl.value,q=qEl.value.trim().toLowerCase();return RAW.filter(x=>{if(city&&x.city!==city)return false;if(region&&x.region!==region)return false;if(priceBand&&x.priceBand!==priceBand)return false;if(pyeongBand&&x.pyeongBand!==pyeongBand)return false;if(signal&&x.signal!==signal)return false;if(status&&x.statusLabel!==status)return false;if(q&&!`${x.region} ${x.title}`.toLowerCase().includes(q))return false;return true;});}
+              function householdMatch(h, band){
+                const n=Number(h||0);
+                if(!band) return true;
+                if(n<=0) return false;
+                if(band==='le300') return n<=300;
+                if(band==='ge300') return n>=300;
+                if(band==='ge500') return n>=500;
+                if(band==='ge700') return n>=700;
+                if(band==='ge7000') return n>=7000;
+                return true;
+              }
+              function filtered(){const city=cityEl.value,region=regionEl.value,priceBand=priceEl.value,pyeongBand=pyeongEl.value,householdBand=householdEl.value,signal=signalEl.value,status=statusEl.value,q=qEl.value.trim().toLowerCase();return RAW.filter(x=>{if(city&&x.city!==city)return false;if(region&&x.region!==region)return false;if(priceBand&&x.priceBand!==priceBand)return false;if(pyeongBand&&x.pyeongBand!==pyeongBand)return false;if(!householdMatch(x.hsehCnt,householdBand))return false;if(signal&&x.signal!==signal)return false;if(status&&x.statusLabel!==status)return false;if(q&&!`${x.region} ${x.title}`.toLowerCase().includes(q))return false;return true;});}
               function sortRows(rows){const arr=[...rows];arr.sort((a,b)=>Number(a.diffPct)-Number(b.diffPct)||Number(b.price)-Number(a.price));return arr;}
               function diffText(v){const n=Number(v||0);const sign=n>0?'+':'';return `${sign}${n.toFixed(1)}%`;}
               function diffClass(v){return Number(v)<=0?'diff-neg':'diff-pos';}
@@ -330,16 +343,16 @@ jobs:
                   const countNormal=items.filter(x=>x.signal==='보통').length;
                   const chips=`<span class="chip city">${esc(city)}</span><span class="chip s-bargain">급매 ${countBargain}</span><span class="chip s-cheap">저렴 ${countCheap}</span><span class="chip s-normal">보통 ${countNormal}</span>`;
 
-                  const rowsHtml=items.map(it=>`<tr><td data-label="도시">${esc(it.city)}</td><td data-label="단지/매물">${esc(it.title)}</td><td data-label="매물가" class="price">${esc(it.priceText)}</td><td data-label="단지 평균가">${esc(it.avgPriceText)}</td><td data-label="평균대비" class="${diffClass(it.diffPct)}">${esc(diffText(it.diffPct))}</td><td data-label="판단"><span class="badge ${signalClass(it.signal)}">${esc(it.signal)}</span></td><td data-label="상태"><span class="badge ${statusClass(it.statusLabel)}">${esc(it.statusLabel)}</span></td><td data-label="평형/층" class="dim">${esc(it.pyeong)}평 / ${esc(it.floor)}</td><td data-label="매물"><a href="${esc(it.url)}" target="_blank">상세보기</a></td><td data-label="지도"><a href="${esc(mapUrl(it))}" target="_blank">지도</a></td></tr>`).join('');
+                  const rowsHtml=items.map(it=>`<tr><td data-label="도시">${esc(it.city)}</td><td data-label="단지/매물">${esc(it.title)}</td><td data-label="매물가" class="price">${esc(it.priceText)}</td><td data-label="단지 평균가">${esc(it.avgPriceText)}</td><td data-label="평균대비" class="${diffClass(it.diffPct)}">${esc(diffText(it.diffPct))}</td><td data-label="판단"><span class="badge ${signalClass(it.signal)}">${esc(it.signal)}</span></td><td data-label="상태"><span class="badge ${statusClass(it.statusLabel)}">${esc(it.statusLabel)}</span></td><td data-label="세대수" class="dim">${it.hsehCnt>0?`${esc(it.hsehCnt)}세대`:'-'}</td><td data-label="평형/층" class="dim">${esc(it.pyeong)}평 / ${esc(it.floor)}</td><td data-label="매물"><a href="${esc(it.url)}" target="_blank">상세보기</a></td><td data-label="지도"><a href="${esc(mapUrl(it))}" target="_blank">지도</a></td></tr>`).join('');
 
-                  return `<section class="region" style="--accent:${accent};"><div class="head"><div class="title">${esc(name)} <span style="color:#64748b;font-size:13px;">(${items.length}건)</span></div><div class="chips">${chips}</div></div><div class="table-wrap"><table><thead><tr><th>도시</th><th>단지/매물</th><th>매물가</th><th>단지 평균가</th><th>평균대비</th><th>판단</th><th>상태</th><th>평형/층</th><th>매물</th><th>지도</th></tr></thead><tbody>${rowsHtml}</tbody></table></div></section>`;
+                  return `<section class="region" style="--accent:${accent};"><div class="head"><div class="title">${esc(name)} <span style="color:#64748b;font-size:13px;">(${items.length}건)</span></div><div class="chips">${chips}</div></div><div class="table-wrap"><table><thead><tr><th>도시</th><th>단지/매물</th><th>매물가</th><th>단지 평균가</th><th>평균대비</th><th>판단</th><th>상태</th><th>세대수</th><th>평형/층</th><th>매물</th><th>지도</th></tr></thead><tbody>${rowsHtml}</tbody></table></div></section>`;
                 }).join('');
               }
 
               cityEl.addEventListener('change',()=>{fillRegions();render();});
-              [regionEl,priceEl,pyeongEl,signalEl,statusEl].forEach(el=>el.addEventListener('change',render));
+              [regionEl,priceEl,pyeongEl,householdEl,signalEl,statusEl].forEach(el=>el.addEventListener('change',render));
               qEl.addEventListener('input',render);
-              resetBtn.addEventListener('click',()=>{cityEl.value='';fillRegions();regionEl.value='';priceEl.value='';pyeongEl.value='';signalEl.value='';statusEl.value='';qEl.value='';render();});
+              resetBtn.addEventListener('click',()=>{cityEl.value='';fillRegions();regionEl.value='';priceEl.value='';pyeongEl.value='';householdEl.value='';signalEl.value='';statusEl.value='';qEl.value='';render();});
 
               fillCities();
               fillRegions();

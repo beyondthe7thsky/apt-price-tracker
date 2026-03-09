@@ -21,9 +21,9 @@ class BotRunner(
     private val naverService: NaverService, // 서비스 교체
     private val repository: FileDataRepository,
     private val notifier: TeamsNotifierService,
-    @Value("\${bot.safe.max-regions-per-run:50}") private val maxRegionsPerRun: Int,
-    @Value("\${bot.safe.region-delay-min-ms:3000}") private val regionDelayMinMs: Long,
-    @Value("\${bot.safe.region-delay-max-ms:7000}") private val regionDelayMaxMs: Long,
+    @Value("\${bot.safe.max-regions-per-run:0}") private val maxRegionsPerRun: Int,
+    @Value("\${bot.safe.region-delay-min-ms:5000}") private val regionDelayMinMs: Long,
+    @Value("\${bot.safe.region-delay-max-ms:9000}") private val regionDelayMaxMs: Long,
     @Value("\${bot.market.off-market-confirm-miss-count:3}") private val offMarketConfirmMissCount: Int,
 ) : CommandLineRunner {
 
@@ -86,16 +86,39 @@ class BotRunner(
             mapOf("name" to "서울강동_상일동", "code" to "1174010300"),
             mapOf("name" to "서울광진_광장동", "code" to "1121510400"),
             mapOf("name" to "서울광진_자양동", "code" to "1121510500"),
+            mapOf("name" to "서울동대문_용두동", "code" to "1123010200"),
+            mapOf("name" to "서울동대문_제기동", "code" to "1123010300"),
             mapOf("name" to "서울동대문_전농동", "code" to "1123010400"),
             mapOf("name" to "서울동대문_답십리동", "code" to "1123010500"),
+            mapOf("name" to "서울동대문_장안동", "code" to "1123010600"),
+            mapOf("name" to "서울동대문_청량리동", "code" to "1123010700"),
+            mapOf("name" to "서울동대문_휘경동", "code" to "1123010900"),
+            mapOf("name" to "서울동대문_이문동", "code" to "1123011000"),
             mapOf("name" to "서울성북_길음동", "code" to "1129013400"),
+            mapOf("name" to "서울성북_정릉동", "code" to "1129013300"),
+            mapOf("name" to "서울성북_종암동", "code" to "1129013500"),
+            mapOf("name" to "서울성북_하월곡동", "code" to "1129013600"),
+            mapOf("name" to "서울성북_상월곡동", "code" to "1129013700"),
+            mapOf("name" to "서울성북_장위동", "code" to "1129013800"),
+            mapOf("name" to "서울서대문_북아현동", "code" to "1141011000"),
+            mapOf("name" to "서울서대문_홍제동", "code" to "1141011100"),
+            mapOf("name" to "서울서대문_연희동", "code" to "1141011700"),
+            mapOf("name" to "서울서대문_홍은동", "code" to "1141011800"),
             mapOf("name" to "서울서대문_남가좌동", "code" to "1141012000"),
             mapOf("name" to "서울서대문_북가좌동", "code" to "1141011900"),
+            mapOf("name" to "서울종로_무악동", "code" to "1111018700"),
+            mapOf("name" to "서울종로_평동", "code" to "1111017700"),
+            mapOf("name" to "서울중구_신당동", "code" to "1114016200"),
+            mapOf("name" to "서울중구_중림동", "code" to "1114017100"),
             mapOf("name" to "서울은평_진관동", "code" to "1138011400"),
             mapOf("name" to "서울은평_응암동", "code" to "1138010700")
         )
 
-        val runRegions = targetRegions.take(maxRegionsPerRun.coerceAtLeast(1))
+        val runRegions = when {
+            maxRegionsPerRun <= 0 -> targetRegions
+            maxRegionsPerRun >= targetRegions.size -> targetRegions
+            else -> targetRegions.take(maxRegionsPerRun)
+        }
         log.info(
             "=== [네이버 모바일] 결혼 준비용 매물 감시 가동 (전체: {}개 동, 이번 실행: {}개 동) ===",
             targetRegions.size,

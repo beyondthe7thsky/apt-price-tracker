@@ -11,7 +11,7 @@
 
 ## 핵심 기능
 
-- 대상 지역(현재 50개 동) 순회 수집
+- 대상 지역(현재 69개 동) 순회 수집
 - 20~39평 매물만 저장
 - 매물 상태 라이프사이클 관리
   - `ACTIVE` (활성)
@@ -69,7 +69,7 @@
 
 파일: `src/main/resources/application.yml`
 
-- `bot.safe.max-regions-per-run`: 기본 `50`
+- `bot.safe.max-regions-per-run`: 기본 `0` (전체 동 실행)
 - `bot.market.off-market-confirm-miss-count`: 소진추정 전환 임계치
 - `naver.safe.abuse-cooldown-minutes`: abuse 감지 후 쿨다운(기본 `30`분)
 - `naver.safe.request-timeout-ms`: 요청 타임아웃

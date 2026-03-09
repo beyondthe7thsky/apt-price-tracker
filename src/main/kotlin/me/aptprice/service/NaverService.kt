@@ -38,20 +38,20 @@ class NaverService(private val objectMapper: ObjectMapper) {
     @Value("\${naver.safe.max-complex-pages:1}")
     private var maxComplexPages: Int = 1
 
-    @Value("\${naver.safe.max-complexes-per-region:50}")
-    private var maxComplexesPerRegion: Int = 50
+    @Value("\${naver.safe.max-complexes-per-region:35}")
+    private var maxComplexesPerRegion: Int = 35
 
-    @Value("\${naver.safe.complex-delay-min-ms:700}")
-    private var complexDelayMinMs: Long = 700L
+    @Value("\${naver.safe.complex-delay-min-ms:1200}")
+    private var complexDelayMinMs: Long = 1_200L
 
-    @Value("\${naver.safe.complex-delay-max-ms:1500}")
-    private var complexDelayMaxMs: Long = 1_500L
+    @Value("\${naver.safe.complex-delay-max-ms:2600}")
+    private var complexDelayMaxMs: Long = 2_600L
 
-    @Value("\${naver.safe.page-delay-min-ms:300}")
-    private var pageDelayMinMs: Long = 300L
+    @Value("\${naver.safe.page-delay-min-ms:600}")
+    private var pageDelayMinMs: Long = 600L
 
-    @Value("\${naver.safe.page-delay-max-ms:900}")
-    private var pageDelayMaxMs: Long = 900L
+    @Value("\${naver.safe.page-delay-max-ms:1500}")
+    private var pageDelayMaxMs: Long = 1_500L
 
     @Value("\${naver.safe.request-timeout-ms:20000}")
     private var requestTimeoutMs: Long = 20_000L
@@ -127,9 +127,15 @@ class NaverService(private val objectMapper: ObjectMapper) {
             val hscpNo = node.get("hscpNo")?.asText()?.trim().orEmpty()
             val hscpNm = node.get("hscpNm")?.asText()?.trim().orEmpty()
             val hscpTypeCd = node.get("hscpTypeCd")?.asText()?.trim().orEmpty()
+            val householdCount = firstPositive(
+                parseHouseholdCount(node.get("hsehCnt")),
+                parseHouseholdCount(node.get("totHsehCnt")),
+                parseHouseholdCount(node.get("totHhldCnt")),
+                parseHouseholdCount(node.get("hhldCnt"))
+            )
             if (hscpNo.isBlank() || hscpNm.isBlank()) return@mapNotNull null
             if (hscpTypeCd != "A01") return@mapNotNull null // 아파트만 수집
-            ComplexInfo(hscpNo = hscpNo, hscpNm = hscpNm)
+            ComplexInfo(hscpNo = hscpNo, hscpNm = hscpNm, hsehCnt = householdCount)
         }
     }
 
@@ -180,6 +186,13 @@ class NaverService(private val objectMapper: ObjectMapper) {
         val priceText = node.get("prcInfo")?.asText("").orEmpty()
         val parsedPrice = parsePrice(priceText)
         if (parsedPrice <= 0L) return null
+        val householdCount = firstPositive(
+            parseHouseholdCount(node.get("hsehCnt")),
+            parseHouseholdCount(node.get("totHsehCnt")),
+            parseHouseholdCount(node.get("totHhldCnt")),
+            parseHouseholdCount(node.get("hhldCnt")),
+            complex.hsehCnt
+        )
 
         val title = node.get("atclNm")?.asText()?.trim().orEmpty().ifBlank { complex.hscpNm }
         val floor = node.get("flrInfo")?.asText()?.trim().orEmpty()
@@ -193,7 +206,7 @@ class NaverService(private val objectMapper: ObjectMapper) {
             floor = floor,
             areaSqm = areaSqm,
             pyeong = (areaSqm / 3.3058).roundToInt(),
-            hsehCnt = 0, // m.land 응답에는 총 세대수 필드가 없어 우선 0으로 둡니다.
+            hsehCnt = householdCount,
             url = "https://fin.land.naver.com/articles/$articleNo"
         )
     }
@@ -298,13 +311,27 @@ class NaverService(private val objectMapper: ObjectMapper) {
         } else clean.toLongOrNull() ?: 0L
     }
 
+    private fun parseHouseholdCount(node: JsonNode?): Int {
+        if (node == null || node.isNull) return 0
+        val value = when {
+            node.isNumber -> node.asInt(0)
+            node.isTextual -> node.asText("").replace(",", "").trim().toIntOrNull() ?: 0
+            else -> 0
+        }
+        return value.coerceAtLeast(0)
+    }
+
+    private fun firstPositive(vararg values: Int): Int =
+        values.firstOrNull { it > 0 } ?: 0
+
     private fun String.oneLineSnippet(maxLength: Int = 180): String {
         return replace("\n", " ").replace("\r", " ").trim().take(maxLength)
     }
 
     private data class ComplexInfo(
         val hscpNo: String,
-        val hscpNm: String
+        val hscpNm: String,
+        val hsehCnt: Int = 0
     )
 
     private data class ArticleFetchResult(
