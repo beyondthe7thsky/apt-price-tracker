@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">오늘의 아파트 매물 리포트 예시</title>
+  <desc id="desc">리포트 화면 구성 예시 이미지</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#d8edf7"/>
+      <stop offset="100%" stop-color="#e9f4fb"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <text x="32" y="62" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="48" font-weight="700" fill="#1f2937">오늘의 아파트 매물 리포트</text>
+  <text x="32" y="104" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="24" fill="#475569">기준시각 / 노출 매물 / 필터 요약</text>
+
+  <rect x="32" y="124" width="1536" height="40" rx="10" fill="#f8fbff" stroke="#d8e2f0"/>
+  <text x="48" y="150" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="18" fill="#334155">평균대비 = (매물가 - 단지평균가) / 단지평균가 × 100</text>
+
+  <rect x="32" y="180" width="1536" height="62" rx="16" fill="#ffffff" stroke="#dbe3ee"/>
+  <rect x="48" y="196" width="170" height="30" rx="10" fill="#f8fafc" stroke="#cfd8e6"/>
+  <rect x="234" y="196" width="180" height="30" rx="10" fill="#f8fafc" stroke="#cfd8e6"/>
+  <rect x="430" y="196" width="180" height="30" rx="10" fill="#f8fafc" stroke="#cfd8e6"/>
+  <rect x="626" y="196" width="180" height="30" rx="10" fill="#f8fafc" stroke="#cfd8e6"/>
+  <rect x="822" y="196" width="180" height="30" rx="10" fill="#f8fafc" stroke="#cfd8e6"/>
+  <rect x="1018" y="196" width="180" height="30" rx="10" fill="#f8fafc" stroke="#cfd8e6"/>
+  <rect x="1214" y="196" width="170" height="30" rx="10" fill="#ffffff" stroke="#2563eb"/>
+  <rect x="1400" y="196" width="152" height="30" rx="10" fill="#0f172a"/>
+
+  <g transform="translate(32 260)">
+    <rect width="212" height="96" rx="14" fill="#ffffff" stroke="#dbe3ee"/>
+    <text x="16" y="36" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="18" fill="#64748b">노출 매물</text>
+    <text x="16" y="74" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="44" font-weight="700" fill="#1f2937">5049</text>
+  </g>
+  <g transform="translate(258 260)">
+    <rect width="212" height="96" rx="14" fill="#ffffff" stroke="#dbe3ee"/>
+    <text x="16" y="36" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="18" fill="#64748b">지역 수</text>
+    <text x="16" y="74" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="44" font-weight="700" fill="#1f2937">35</text>
+  </g>
+  <g transform="translate(484 260)">
+    <rect width="212" height="96" rx="14" fill="#ffffff" stroke="#dbe3ee"/>
+    <text x="16" y="36" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="18" fill="#64748b">급매</text>
+    <text x="16" y="74" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="44" font-weight="700" fill="#b91c1c">204</text>
+  </g>
+  <g transform="translate(710 260)">
+    <rect width="212" height="96" rx="14" fill="#ffffff" stroke="#dbe3ee"/>
+    <text x="16" y="36" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="18" fill="#64748b">저렴</text>
+    <text x="16" y="74" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="44" font-weight="700" fill="#0369a1">665</text>
+  </g>
+  <g transform="translate(936 260)">
+    <rect width="212" height="96" rx="14" fill="#ffffff" stroke="#dbe3ee"/>
+    <text x="16" y="36" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="18" fill="#64748b">재등록</text>
+    <text x="16" y="74" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="44" font-weight="700" fill="#166534">0</text>
+  </g>
+  <g transform="translate(1162 260)">
+    <rect width="212" height="96" rx="14" fill="#ffffff" stroke="#dbe3ee"/>
+    <text x="16" y="36" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="18" fill="#64748b">소진후보</text>
+    <text x="16" y="74" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="44" font-weight="700" fill="#7c2d12">279</text>
+  </g>
+
+  <rect x="32" y="372" width="1536" height="488" rx="18" fill="#ffffff" stroke="#dbe3ee"/>
+  <rect x="32" y="372" width="6" height="488" fill="#0f766e"/>
+  <text x="52" y="418" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="34" font-weight="700" fill="#1f2937">용인수지_성복동 (238건)</text>
+
+  <rect x="52" y="436" width="120" height="34" rx="14" fill="#e2e8f0"/>
+  <text x="78" y="460" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="18" font-weight="700" fill="#0f172a">용인수지</text>
+  <rect x="184" y="436" width="82" height="34" rx="14" fill="#fecdd3"/>
+  <text x="214" y="460" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="18" font-weight="700" fill="#9f1239">급매</text>
+  <rect x="278" y="436" width="92" height="34" rx="14" fill="#a5f3fc"/>
+  <text x="308" y="460" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="18" font-weight="700" fill="#155e75">저렴</text>
+
+  <line x1="52" y1="494" x2="1548" y2="494" stroke="#e2e8f0"/>
+  <text x="52" y="528" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="20" fill="#64748b">도시</text>
+  <text x="178" y="528" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="20" fill="#64748b">단지/매물</text>
+  <text x="546" y="528" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="20" fill="#64748b">매물가</text>
+  <text x="720" y="528" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="20" fill="#64748b">단지 평균가</text>
+  <text x="900" y="528" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="20" fill="#64748b">평균대비</text>
+  <text x="1038" y="528" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="20" fill="#64748b">판단</text>
+  <text x="1148" y="528" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="20" fill="#64748b">상태</text>
+  <text x="1260" y="528" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="20" fill="#64748b">평형/층</text>
+  <text x="1406" y="528" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="20" fill="#64748b">매물/지도</text>
+
+  <line x1="52" y1="548" x2="1548" y2="548" stroke="#edf1f7"/>
+  <text x="52" y="586" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="24" fill="#1f2937">용인수지</text>
+  <text x="178" y="586" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="24" fill="#1f2937">유진아반하임(도시형)</text>
+  <text x="546" y="586" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="24" font-weight="700" fill="#111827">4억 3000만</text>
+  <text x="720" y="586" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="24" fill="#374151">6억 1545만</text>
+  <text x="900" y="586" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="24" font-weight="700" fill="#16a34a">-30.1%</text>
+  <rect x="1022" y="558" width="66" height="32" rx="14" fill="#fecdd3"/><text x="1043" y="581" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="18" font-weight="700" fill="#9f1239">급매</text>
+  <rect x="1134" y="558" width="66" height="32" rx="14" fill="#bfdbfe"/><text x="1155" y="581" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="18" font-weight="700" fill="#1d4ed8">활성</text>
+  <text x="1260" y="586" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="24" fill="#374151">20평 / B1/4</text>
+  <text x="1406" y="586" font-family="Pretendard, Apple SD Gothic Neo, sans-serif" font-size="24" fill="#2563eb">상세보기 · 지도</text>
+</svg>
