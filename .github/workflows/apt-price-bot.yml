@@ -9,7 +9,7 @@ on:
       max_regions_per_run:
         description: "한 번 실행 시 수집할 최대 동 수 (전체 실행: 49)"
         required: false
-        default: "2"
+        default: "49"
       commit_data:
         description: "data/apt-listings.json 변경분 자동 커밋 여부"
         required: false
@@ -28,6 +28,10 @@ jobs:
     concurrency:
       group: apt-price-bot
       cancel-in-progress: false
+    env:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8
 
     steps:
       - name: Checkout
@@ -43,9 +47,14 @@ jobs:
       - name: Grant execute permission for Gradle wrapper
         run: chmod +x ./gradlew
 
+      - name: Check locale
+        run: |
+          locale
+          echo "JAVA_TOOL_OPTIONS=${JAVA_TOOL_OPTIONS}"
+
       - name: Run bot
         env:
-          BOT_SAFE_MAX_REGIONS_PER_RUN: ${{ github.event.inputs.max_regions_per_run || '2' }}
+          BOT_SAFE_MAX_REGIONS_PER_RUN: ${{ github.event.inputs.max_regions_per_run || '49' }}
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
         run: ./gradlew --no-daemon clean bootRun
 

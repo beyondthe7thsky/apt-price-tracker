@@ -18,7 +18,7 @@ class BotRunner(
     private val naverService: NaverService, // 서비스 교체
     private val repository: FileDataRepository,
     private val notifier: TeamsNotifierService,
-    @Value("\${bot.safe.max-regions-per-run:2}") private val maxRegionsPerRun: Int,
+    @Value("\${bot.safe.max-regions-per-run:49}") private val maxRegionsPerRun: Int,
     @Value("\${bot.safe.region-delay-min-ms:20000}") private val regionDelayMinMs: Long,
     @Value("\${bot.safe.region-delay-max-ms:60000}") private val regionDelayMaxMs: Long,
 ) : CommandLineRunner {
