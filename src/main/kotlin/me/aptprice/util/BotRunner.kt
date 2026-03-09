@@ -1,6 +1,7 @@
 package me.aptprice.util
 
 import me.aptprice.model.Listing
+import me.aptprice.model.MarketStatus
 import me.aptprice.repository.FileDataRepository
 import me.aptprice.service.AbuseBlockedException
 import me.aptprice.service.NaverService
@@ -11,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.CommandLineRunner
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.stereotype.Component
+import java.time.LocalDateTime
 import kotlin.random.Random
 
 @Component
@@ -22,6 +24,7 @@ class BotRunner(
     @Value("\${bot.safe.max-regions-per-run:49}") private val maxRegionsPerRun: Int,
     @Value("\${bot.safe.region-delay-min-ms:3000}") private val regionDelayMinMs: Long,
     @Value("\${bot.safe.region-delay-max-ms:7000}") private val regionDelayMaxMs: Long,
+    @Value("\${bot.market.off-market-confirm-miss-count:3}") private val offMarketConfirmMissCount: Int,
 ) : CommandLineRunner {
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -138,34 +141,87 @@ class BotRunner(
             return
         }
 
-        // 이번 실행에 성공한 지역만 최신 데이터로 교체하고, 실패/미수집 지역 데이터는 보존합니다.
-        val preservedOld = oldData.values.filter { it.regionName !in successfulRegions }
-        val mergedListings = (preservedOld + allNewListings)
+        val now = LocalDateTime.now().toString()
+        val newByArticleNo = allNewListings
             .groupBy { it.articleNo }
-            .mapNotNull { (_, items) -> items.maxByOrNull { it.updatedAt } }
+            .mapValues { (_, items) -> items.maxByOrNull { it.updatedAt } ?: items.first() }
 
+        val mergedByArticleNo = mutableMapOf<String, Listing>()
         val notifyList = mutableListOf<Pair<Listing, String>>()
-        val updatedListings = allNewListings.map { newListing ->
-            val oldListing = oldData[newListing.articleNo]
-            if (oldListing == null) {
-                notifyList.add(Pair(newListing, "신규✨"))
-            } else if (newListing.price < oldListing.price) {
-                notifyList.add(Pair(newListing, "급매⬇️${oldListing.price - newListing.price}만"))
+        var offMarketCandidateChanged = 0
+        var offMarketChanged = 0
+        var relistedChanged = 0
+
+        // 기존 매물 처리: 이번 실행에 성공한 지역에서 미노출이면 소진 후보/소진으로 상태 전환
+        oldData.forEach { (articleNo, oldListing) ->
+            if (newByArticleNo.containsKey(articleNo)) return@forEach
+
+            if (oldListing.regionName !in successfulRegions) {
+                mergedByArticleNo[articleNo] = oldListing
+                return@forEach
             }
-            newListing
+
+            val transitioned = transitionMissingListing(oldListing, now)
+            mergedByArticleNo[articleNo] = transitioned
+
+            if (transitioned.status != oldListing.status) {
+                when (transitioned.status) {
+                    MarketStatus.OFF_MARKET_CANDIDATE -> {
+                        offMarketCandidateChanged += 1
+                    }
+                    MarketStatus.OFF_MARKET -> {
+                        offMarketChanged += 1
+                    }
+                    else -> Unit
+                }
+            }
         }
+
+        // 신규/재노출 매물 처리
+        newByArticleNo.forEach { (articleNo, freshListing) ->
+            val oldListing = oldData[articleNo]
+            val normalizedListing = mergeSeenListing(oldListing, freshListing, now)
+            mergedByArticleNo[articleNo] = normalizedListing
+
+            if (oldListing == null) {
+                notifyList.add(Pair(normalizedListing, "신규✨"))
+            } else if (normalizedListing.status == MarketStatus.RELISTED) {
+                relistedChanged += 1
+                notifyList.add(Pair(normalizedListing, "재등록♻️"))
+            } else if (freshListing.price < oldListing.price) {
+                notifyList.add(Pair(normalizedListing, "급매⬇️${oldListing.price - freshListing.price}만"))
+            }
+        }
+
+        val mergedListings = mergedByArticleNo.values
+            .sortedWith(compareBy<Listing> { it.regionName }.thenBy { it.articleNo })
 
         if (notifyList.isNotEmpty()) {
             notifier.sendGroupedNotification(notifyList)
         }
 
         repository.saveAll(mergedListings)
+        val activeCount = mergedListings.count { it.status == MarketStatus.ACTIVE || it.status == MarketStatus.RELISTED }
+        val candidateCount = mergedListings.count { it.status == MarketStatus.OFF_MARKET_CANDIDATE }
+        val offMarketCount = mergedListings.count { it.status == MarketStatus.OFF_MARKET }
         log.info(
-            "저장 완료 - 성공 지역: {}개, 보존 지역: {}개, 신규 수집: {}건, 최종 저장: {}건",
+            "저장 완료 - 성공 지역: {}개, 보존 지역: {}개, 이번 노출: {}건, 최종 저장: {}건",
             successfulRegions.size,
             (runRegions.size - successfulRegions.size).coerceAtLeast(0),
-            updatedListings.size,
+            newByArticleNo.size,
             mergedListings.size
+        )
+        log.info(
+            "상태 요약 - ACTIVE/RELISTED: {}건, OFF_MARKET_CANDIDATE: {}건, OFF_MARKET: {}건",
+            activeCount,
+            candidateCount,
+            offMarketCount
+        )
+        log.info(
+            "상태 전환 - 소진후보 전환: {}건, 소진 전환: {}건, 재등록 전환: {}건",
+            offMarketCandidateChanged,
+            offMarketChanged,
+            relistedChanged
         )
     }
 
@@ -173,5 +229,59 @@ class BotRunner(
         val min = if (minMs > 0) minMs else defaultMinMs
         val max = if (maxMs >= min) maxMs else defaultMaxMs.coerceAtLeast(min)
         return min to max
+    }
+
+    private fun mergeSeenListing(old: Listing?, fresh: Listing, now: String): Listing {
+        if (old == null) {
+            return fresh.copy(
+                updatedAt = now,
+                firstSeenAt = now,
+                lastSeenAt = now,
+                status = MarketStatus.ACTIVE,
+                statusChangedAt = now,
+                offMarketAt = null,
+                missCount = 0
+            )
+        }
+
+        val nextStatus = if (old.status == MarketStatus.OFF_MARKET) {
+            MarketStatus.RELISTED
+        } else {
+            MarketStatus.ACTIVE
+        }
+        val statusChangedAt = if (nextStatus != old.status) now else old.statusChangedAt
+        val normalizedFirstSeenAt = old.firstSeenAt.ifBlank { old.updatedAt }
+
+        return fresh.copy(
+            updatedAt = now,
+            firstSeenAt = normalizedFirstSeenAt,
+            lastSeenAt = now,
+            status = nextStatus,
+            statusChangedAt = statusChangedAt,
+            offMarketAt = null,
+            missCount = 0
+        )
+    }
+
+    private fun transitionMissingListing(old: Listing, now: String): Listing {
+        if (old.status == MarketStatus.OFF_MARKET) {
+            return old
+        }
+
+        val newMissCount = old.missCount + 1
+        val threshold = offMarketConfirmMissCount.coerceAtLeast(2)
+        val nextStatus = if (newMissCount >= threshold) {
+            MarketStatus.OFF_MARKET
+        } else {
+            MarketStatus.OFF_MARKET_CANDIDATE
+        }
+        val statusChangedAt = if (nextStatus != old.status) now else old.statusChangedAt
+
+        return old.copy(
+            status = nextStatus,
+            statusChangedAt = statusChangedAt,
+            offMarketAt = if (nextStatus == MarketStatus.OFF_MARKET) (old.offMarketAt ?: now) else old.offMarketAt,
+            missCount = newMissCount
+        )
     }
 }

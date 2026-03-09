@@ -57,7 +57,6 @@ jobs:
       - name: Run bot
         env:
           BOT_SAFE_MAX_REGIONS_PER_RUN: ${{ github.event.inputs.max_regions_per_run || '49' }}
-          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
         run: ./gradlew --no-daemon clean bootRun
 
       - name: Commit updated data

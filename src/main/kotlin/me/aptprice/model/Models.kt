@@ -2,6 +2,13 @@ package me.aptprice.model
 
 import java.time.LocalDateTime
 
+enum class MarketStatus {
+    ACTIVE,
+    OFF_MARKET_CANDIDATE,
+    OFF_MARKET,
+    RELISTED
+}
+
 data class Listing(
     val articleNo: String,
     val hscpNo: String = "",
@@ -14,6 +21,12 @@ data class Listing(
     val hsehCnt: Int, // 총 세대수
     val url: String,
     val updatedAt: String = LocalDateTime.now().toString(),
+    val firstSeenAt: String = updatedAt,
+    val lastSeenAt: String = updatedAt,
+    val status: MarketStatus = MarketStatus.ACTIVE,
+    val statusChangedAt: String = updatedAt,
+    val offMarketAt: String? = null,
+    val missCount: Int = 0,
 )
 
 data class TeamsMessage(
