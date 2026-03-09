@@ -42,14 +42,21 @@ class TeamsNotifierService(
         val pyeong20s = notifyItems.filter { it.first.pyeong in 20..29 }
         val pyeong30s = notifyItems.filter { it.first.pyeong in 30..39 }
 
-        val card = buildSingleCard(
-            listOf(
-                "🏠 20평대" to pyeong20s,
-                "🏢 30평대" to pyeong30s
-            ),
-            notifyItems.size
+        val groupedItems = listOf(
+            "🏠 20평대" to pyeong20s,
+            "🏢 30평대" to pyeong30s
         )
-        if (card == null) {
+
+        val requestBody: Any = if (isPowerAutomateUrl(webhookUrl)) {
+            buildPowerAutomatePayload(groupedItems, notifyItems.size)
+        } else {
+            buildSingleCard(groupedItems, notifyItems.size) ?: run {
+                log.info("전송 가능한 Teams 카드가 없어 알림을 스킵합니다.")
+                return
+            }
+        }
+
+        if (requestBody is TeamsMessage && requestBody.sections.isEmpty()) {
             log.info("전송 가능한 Teams 카드가 없어 알림을 스킵합니다.")
             return
         }
@@ -65,7 +72,7 @@ class TeamsNotifierService(
             restTemplate.exchange(
                 webhookUrl,
                 HttpMethod.POST,
-                HttpEntity(card, headers),
+                HttpEntity(requestBody, headers),
                 String::class.java
             )
             log.info("팀즈 알림 전송 완료 (1/1)")
@@ -138,6 +145,69 @@ class TeamsNotifierService(
             shownCount += 1
         }
         return builder.toString() to shownCount
+    }
+
+    private fun buildPowerAutomatePayload(
+        groupedItems: List<Pair<String, List<Pair<Listing, String>>>>,
+        totalNotifyCount: Int,
+    ): Map<String, Any?> {
+        val adaptiveBody = mutableListOf<Map<String, Any>>()
+        adaptiveBody.add(
+            mapOf(
+                "type" to "TextBlock",
+                "text" to "부동산 새 매물 리포트",
+                "weight" to "Bolder",
+                "size" to "Medium",
+                "wrap" to true
+            )
+        )
+        adaptiveBody.add(
+            mapOf(
+                "type" to "TextBlock",
+                "text" to "총 ${totalNotifyCount}건 (${groupedItems.sumOf { it.second.size }}건 분류됨)",
+                "wrap" to true,
+                "spacing" to "Small"
+            )
+        )
+
+        groupedItems.forEach { (title, items) ->
+            if (items.isEmpty()) return@forEach
+            val (text, shownCount) = buildSectionText(items)
+            val extraText = if (items.size > shownCount) "\n\n... 외 ${items.size - shownCount}건" else ""
+            adaptiveBody.add(
+                mapOf(
+                    "type" to "TextBlock",
+                    "text" to "$title (총 ${items.size}건)",
+                    "weight" to "Bolder",
+                    "wrap" to true,
+                    "spacing" to "Medium"
+                )
+            )
+            adaptiveBody.add(
+                mapOf(
+                    "type" to "TextBlock",
+                    "text" to (text + extraText),
+                    "wrap" to true,
+                    "spacing" to "Small"
+                )
+            )
+        }
+
+        return mapOf(
+            "type" to "message",
+            "attachments" to listOf(
+                mapOf(
+                    "contentType" to "application/vnd.microsoft.card.adaptive",
+                    "contentUrl" to null,
+                    "content" to mapOf(
+                        "\$schema" to "http://adaptivecards.io/schemas/adaptive-card.json",
+                        "type" to "AdaptiveCard",
+                        "version" to "1.4",
+                        "body" to adaptiveBody
+                    )
+                )
+            )
+        )
     }
 
     private fun toMarkdownLine(item: Pair<Listing, String>): String {
