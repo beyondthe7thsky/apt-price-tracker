@@ -6,7 +6,7 @@ on:
       max_items_per_group:
         description: "평형 그룹(20/30평대)당 최대 표시 건수"
         required: false
-        default: "60"
+        default: "20"
       region_filter:
         description: "지역명 포함 필터 (예: 수원_매탄동). 비우면 전체"
         required: false
@@ -21,7 +21,7 @@ jobs:
     env:
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
-      MAX_ITEMS_PER_GROUP: ${{ github.event.inputs.max_items_per_group || '60' }}
+      MAX_ITEMS_PER_GROUP: ${{ github.event.inputs.max_items_per_group || '20' }}
       REGION_FILTER: ${{ github.event.inputs.region_filter || '' }}
       TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
 
@@ -56,8 +56,10 @@ jobs:
               sys.exit(1)
 
           region_filter = (os.getenv("REGION_FILTER") or "").strip()
-          max_items = int(os.getenv("MAX_ITEMS_PER_GROUP", "60"))
-          max_items = max(1, min(max_items, 200))
+          max_items = int(os.getenv("MAX_ITEMS_PER_GROUP", "20"))
+          max_items = max(1, min(max_items, 50))
+          max_group_chars = 3500
+          max_body_bytes = 24000
 
           listings = [x for x in data if isinstance(x, dict)]
           if region_filter:
@@ -83,11 +85,19 @@ jobs:
               return f"{region} {title} **{price}만** ({pyeong}평, {floor}) - [상세보기]({url})"
 
           def build_text(items):
-              shown = items[:max_items]
-              lines = [to_line(x) for x in shown]
-              text = "\n\n".join(lines)
-              if len(items) > len(shown):
-                  text += f"\n\n... 외 {len(items) - len(shown)}건"
+              shown_count = 0
+              chunks = []
+              for x in items:
+                  if shown_count >= max_items:
+                      break
+                  line = to_line(x)
+                  if chunks and (len("\n\n".join(chunks)) + len(line) + 2 > max_group_chars):
+                      break
+                  chunks.append(line)
+                  shown_count += 1
+              text = "\n\n".join(chunks)
+              if len(items) > shown_count:
+                  text += f"\n\n... 외 {len(items) - shown_count}건"
               return text
 
           sections = [
@@ -123,6 +133,22 @@ jobs:
           }
 
           body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+          if len(body) > max_body_bytes:
+              payload = {
+                  "@type": "MessageCard",
+                  "themeColor": "0076D7",
+                  "summary": "저장된 JSON 기준 매물 리포트",
+                  "sections": [
+                      {
+                          "activityTitle": "저장된 JSON 기준 매물 리포트 (요약)",
+                          "text": f"총 {len(listings)}건 (필터: {'없음' if not region_filter else region_filter})\n\n🏠 20평대: {len(group20)}건\n🏢 30평대: {len(group30)}건\n\n메시지 길이 제한으로 상세 목록은 생략되었습니다.",
+                          "markdown": True,
+                      }
+                  ],
+              }
+              body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+          print(f"payload_bytes={len(body)}")
           req = urllib.request.Request(
               webhook,
               data=body,
@@ -132,8 +158,9 @@ jobs:
 
           with urllib.request.urlopen(req, timeout=30) as resp:
               status = getattr(resp, "status", None) or resp.getcode()
+              run_id = resp.headers.get("x-ms-workflow-run-id", "")
               if status < 200 or status >= 300:
                   print(f"Teams request failed. status={status}")
                   sys.exit(1)
-              print(f"Teams message sent. status={status}, total={len(listings)}, 20평대={len(group20)}, 30평대={len(group30)}")
+              print(f"Teams message accepted. status={status}, run_id={run_id}, total={len(listings)}, 20평대={len(group20)}, 30평대={len(group30)}")
           PY
