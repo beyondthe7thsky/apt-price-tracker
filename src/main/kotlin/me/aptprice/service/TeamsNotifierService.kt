@@ -9,8 +9,8 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Component
-import org.springframework.web.client.RestTemplate
 import org.springframework.web.client.HttpStatusCodeException
+import org.springframework.web.client.RestTemplate
 import java.net.URI
 
 @Component
@@ -39,24 +39,18 @@ class TeamsNotifierService(
             return
         }
 
-        val pyeong20s = notifyItems.filter { it.first.pyeong in 20..29 }
-        val pyeong30s = notifyItems.filter { it.first.pyeong in 30..39 }
-
-        val groupedItems = listOf(
-            "🏠 20평대" to pyeong20s,
-            "🏢 30평대" to pyeong30s
-        )
-
-        val requestBody: Any = if (isPowerAutomateUrl(webhookUrl)) {
-            buildPowerAutomatePayload(groupedItems, notifyItems.size)
-        } else {
-            buildSingleCard(groupedItems, notifyItems.size) ?: run {
-                log.info("전송 가능한 Teams 카드가 없어 알림을 스킵합니다.")
-                return
-            }
+        val groupedItems = buildCombinedGroups(notifyItems)
+        if (groupedItems.isEmpty()) {
+            log.info("가격대/평형 조건에 맞는 전송 대상이 없어 알림을 스킵합니다.")
+            return
         }
 
-        if (requestBody is TeamsMessage && requestBody.sections.isEmpty()) {
+        val requestBodies: List<Any> = if (isPowerAutomateUrl(webhookUrl)) {
+            buildPowerAutomateCards(groupedItems, notifyItems.size)
+        } else {
+            buildMessageCards(groupedItems, notifyItems.size)
+        }
+        if (requestBodies.isEmpty()) {
             log.info("전송 가능한 Teams 카드가 없어 알림을 스킵합니다.")
             return
         }
@@ -68,131 +62,106 @@ class TeamsNotifierService(
             }
         }
 
-        try {
-            restTemplate.exchange(
-                webhookUrl,
-                HttpMethod.POST,
-                HttpEntity(requestBody, headers),
-                String::class.java
-            )
-            log.info("팀즈 알림 전송 완료 (1/1)")
-        } catch (e: HttpStatusCodeException) {
-            val status = e.statusCode.value()
-            log.error(
-                "팀즈 알림 전송 HTTP 오류: status={}, url={}, body={}",
-                status,
-                maskedWebhookUrl(webhookUrl),
-                sanitizeBody(e.responseBodyAsString),
-                e
-            )
-            if (status == 401 || status == 403) {
-                log.error("인증 오류(401/403)입니다. webhook URL/서명(sig) 값을 확인하세요.")
+        var successCount = 0
+        for ((index, requestBody) in requestBodies.withIndex()) {
+            try {
+                restTemplate.exchange(
+                    webhookUrl,
+                    HttpMethod.POST,
+                    HttpEntity(requestBody, headers),
+                    String::class.java
+                )
+                successCount += 1
+                log.info("팀즈 알림 전송 완료 ({}/{})", index + 1, requestBodies.size)
+            } catch (e: HttpStatusCodeException) {
+                val status = e.statusCode.value()
+                log.error(
+                    "팀즈 알림 전송 HTTP 오류 ({}/{}): status={}, url={}, body={}",
+                    index + 1,
+                    requestBodies.size,
+                    status,
+                    maskedWebhookUrl(webhookUrl),
+                    sanitizeBody(e.responseBodyAsString),
+                    e
+                )
+                if (status == 401 || status == 403) {
+                    log.error("인증 오류(401/403)입니다. webhook URL/서명(sig) 값을 확인하세요.")
+                    break
+                }
+            } catch (e: Exception) {
+                log.error(
+                    "팀즈 알림 전송 중 오류 발생 ({}/{}), url={}",
+                    index + 1,
+                    requestBodies.size,
+                    maskedWebhookUrl(webhookUrl),
+                    e
+                )
             }
-        } catch (e: Exception) {
-            log.error(
-                "팀즈 알림 전송 중 오류 발생, url={}",
-                maskedWebhookUrl(webhookUrl),
-                e
-            )
         }
-        log.info("팀즈 알림 전송 요약 - 전체: 1건")
+        log.info("팀즈 알림 전송 요약 - 성공: {}건, 전체: {}건", successCount, requestBodies.size)
     }
 
-    private fun buildSingleCard(
+    private fun buildMessageCards(
         groupedItems: List<Pair<String, List<Pair<Listing, String>>>>,
         totalNotifyCount: Int,
-    ): TeamsMessage? {
-        val sections = mutableListOf<TeamsMessage.Section>()
-
-        sections.add(
-            TeamsMessage.Section(
-                activityTitle = "부동산 새 매물 리포트",
-                text = "총 ${totalNotifyCount}건 (${groupedItems.sumOf { it.second.size }}건 분류됨)",
-                markdown = true
-            )
-        )
-
-        groupedItems.forEach { (title, items) ->
-            if (items.isEmpty()) return@forEach
-            val (text, shownCount) = buildSectionText(items)
-            val extraText = if (items.size > shownCount) "\n\n... 외 ${items.size - shownCount}건" else ""
-            sections.add(
-                TeamsMessage.Section(
-                    activityTitle = "$title (총 ${items.size}건)",
-                    text = text + extraText,
-                    markdown = true
+    ): List<TeamsMessage> {
+        val cards = mutableListOf<TeamsMessage>()
+        groupedItems.forEach { (groupTitle, items) ->
+            val chunks = splitItems(items)
+            chunks.forEachIndexed { index, chunk ->
+                val title = if (chunks.size == 1) {
+                    "$groupTitle (총 ${items.size}건)"
+                } else {
+                    "$groupTitle (총 ${items.size}건, ${index + 1}/${chunks.size})"
+                }
+                val text = chunk.joinToString("\n\n") { toMarkdownLine(it) }
+                cards.add(
+                    TeamsMessage(
+                        summary = "부동산 새 매물 리포트",
+                        sections = listOf(
+                            TeamsMessage.Section(
+                                activityTitle = "부동산 새 매물 리포트",
+                                text = "총 ${totalNotifyCount}건",
+                                markdown = true
+                            ),
+                            TeamsMessage.Section(
+                                activityTitle = title,
+                                text = text,
+                                markdown = true
+                            )
+                        )
+                    )
                 )
-            )
+            }
         }
-
-        if (sections.size <= 1) return null
-        return TeamsMessage(
-            summary = "부동산 새 매물 리포트",
-            sections = sections
-        )
+        return cards
     }
 
-    private fun buildSectionText(items: List<Pair<Listing, String>>): Pair<String, Int> {
-        val builder = StringBuilder()
-        var shownCount = 0
-
-        for (item in items) {
-            val line = toMarkdownLine(item)
-            if (shownCount >= MAX_ITEMS_PER_GROUP) break
-            if (builder.isNotEmpty() && builder.length + line.length + 2 > MAX_GROUP_TEXT_CHARS) break
-            if (builder.isNotEmpty()) builder.append("\n\n")
-            builder.append(line)
-            shownCount += 1
-        }
-        return builder.toString() to shownCount
-    }
-
-    private fun buildPowerAutomatePayload(
+    private fun buildPowerAutomateCards(
         groupedItems: List<Pair<String, List<Pair<Listing, String>>>>,
+        totalNotifyCount: Int,
+    ): List<Map<String, Any?>> {
+        val cards = mutableListOf<Map<String, Any?>>()
+        groupedItems.forEach { (groupTitle, items) ->
+            val chunks = splitItems(items)
+            chunks.forEachIndexed { index, chunk ->
+                val title = if (chunks.size == 1) {
+                    "$groupTitle (총 ${items.size}건)"
+                } else {
+                    "$groupTitle (총 ${items.size}건, ${index + 1}/${chunks.size})"
+                }
+                val text = chunk.joinToString("\n\n") { toMarkdownLine(it) }
+                cards.add(buildPowerAutomateCardPayload(title, text, totalNotifyCount))
+            }
+        }
+        return cards
+    }
+
+    private fun buildPowerAutomateCardPayload(
+        title: String,
+        text: String,
         totalNotifyCount: Int,
     ): Map<String, Any?> {
-        val adaptiveBody = mutableListOf<Map<String, Any>>()
-        adaptiveBody.add(
-            mapOf(
-                "type" to "TextBlock",
-                "text" to "부동산 새 매물 리포트",
-                "weight" to "Bolder",
-                "size" to "Medium",
-                "wrap" to true
-            )
-        )
-        adaptiveBody.add(
-            mapOf(
-                "type" to "TextBlock",
-                "text" to "총 ${totalNotifyCount}건 (${groupedItems.sumOf { it.second.size }}건 분류됨)",
-                "wrap" to true,
-                "spacing" to "Small"
-            )
-        )
-
-        groupedItems.forEach { (title, items) ->
-            if (items.isEmpty()) return@forEach
-            val (text, shownCount) = buildSectionText(items)
-            val extraText = if (items.size > shownCount) "\n\n... 외 ${items.size - shownCount}건" else ""
-            adaptiveBody.add(
-                mapOf(
-                    "type" to "TextBlock",
-                    "text" to "$title (총 ${items.size}건)",
-                    "weight" to "Bolder",
-                    "wrap" to true,
-                    "spacing" to "Medium"
-                )
-            )
-            adaptiveBody.add(
-                mapOf(
-                    "type" to "TextBlock",
-                    "text" to (text + extraText),
-                    "wrap" to true,
-                    "spacing" to "Small"
-                )
-            )
-        }
-
         return mapOf(
             "type" to "message",
             "attachments" to listOf(
@@ -203,17 +172,101 @@ class TeamsNotifierService(
                         "\$schema" to "http://adaptivecards.io/schemas/adaptive-card.json",
                         "type" to "AdaptiveCard",
                         "version" to "1.4",
-                        "body" to adaptiveBody
+                        "body" to listOf(
+                            mapOf(
+                                "type" to "TextBlock",
+                                "text" to "부동산 새 매물 리포트",
+                                "weight" to "Bolder",
+                                "size" to "Medium",
+                                "wrap" to true
+                            ),
+                            mapOf(
+                                "type" to "TextBlock",
+                                "text" to "총 ${totalNotifyCount}건",
+                                "wrap" to true,
+                                "spacing" to "Small"
+                            ),
+                            mapOf(
+                                "type" to "TextBlock",
+                                "text" to title,
+                                "weight" to "Bolder",
+                                "wrap" to true,
+                                "spacing" to "Medium"
+                            ),
+                            mapOf(
+                                "type" to "TextBlock",
+                                "text" to text,
+                                "wrap" to true,
+                                "spacing" to "Small"
+                            )
+                        )
                     )
                 )
             )
         )
     }
 
+    private fun splitItems(items: List<Pair<Listing, String>>): List<List<Pair<Listing, String>>> {
+        val chunks = mutableListOf<List<Pair<Listing, String>>>()
+        var current = mutableListOf<Pair<Listing, String>>()
+        var currentChars = 0
+
+        for (item in items) {
+            val lineLen = toMarkdownLine(item).length + 2
+            val exceedByCount = current.size >= MAX_ITEMS_PER_CARD
+            val exceedByChars = current.isNotEmpty() && currentChars + lineLen > MAX_GROUP_TEXT_CHARS
+            if (exceedByCount || exceedByChars) {
+                chunks.add(current.toList())
+                current = mutableListOf()
+                currentChars = 0
+            }
+            current.add(item)
+            currentChars += lineLen
+        }
+        if (current.isNotEmpty()) {
+            chunks.add(current.toList())
+        }
+        return chunks
+    }
+
+    private fun buildCombinedGroups(items: List<Pair<Listing, String>>): List<Pair<String, List<Pair<Listing, String>>>> {
+        val sorted = items.sortedByDescending { it.first.price }
+        val pyeongBands = listOf(
+            "20평대" to (20..29),
+            "30평대" to (30..39)
+        )
+        val priceBands = listOf(
+            PriceBand("8억 미만", 0L, 80_000L),
+            PriceBand("8~9억대", 80_000L, 90_000L),
+            PriceBand("9~10억대", 90_000L, 100_000L),
+            PriceBand("10~12억대", 100_000L, 120_000L),
+            PriceBand("12억 이상", 120_000L, null)
+        )
+
+        val groups = mutableListOf<Pair<String, List<Pair<Listing, String>>>>()
+        pyeongBands.forEach { (pyeongTitle, range) ->
+            val pyeongItems = sorted.filter { it.first.pyeong in range }
+            priceBands.forEach { band ->
+                val bandItems = pyeongItems.filter { band.contains(it.first.price) }
+                if (bandItems.isNotEmpty()) {
+                    groups.add("🏷️ $pyeongTitle · ${band.title}" to bandItems)
+                }
+            }
+        }
+        return groups
+    }
+
     private fun toMarkdownLine(item: Pair<Listing, String>): String {
         val (listing, type) = item
         val householdInfo = if (listing.hsehCnt > 0) ", ${listing.hsehCnt}세대" else ""
-        return "**[$type]** ${listing.regionName} ${listing.title} **${listing.price}만** (${listing.pyeong}평$householdInfo, ${listing.floor}) - [상세보기](${listing.url})"
+        return "**[$type]** ${listing.regionName} ${listing.title} **${formatPrice(listing.price)}** (${listing.pyeong}평$householdInfo, ${listing.floor}) - [상세보기](${listing.url})"
+    }
+
+    private fun formatPrice(priceMan: Long): String {
+        if (priceMan < 10_000) return "${priceMan}만"
+        val eok = priceMan / 10_000
+        val man = priceMan % 10_000
+        return if (man == 0L) "${eok}억" else "${eok}억 ${man}만"
     }
 
     private fun isPowerAutomateUrl(url: String): Boolean =
@@ -246,7 +299,16 @@ class TeamsNotifierService(
     }
 
     companion object {
-        private const val MAX_ITEMS_PER_GROUP = 60
-        private const val MAX_GROUP_TEXT_CHARS = 7000
+        private const val MAX_ITEMS_PER_CARD = 25
+        private const val MAX_GROUP_TEXT_CHARS = 3500
+    }
+
+    private data class PriceBand(
+        val title: String,
+        val minInclusive: Long,
+        val maxExclusive: Long?,
+    ) {
+        fun contains(price: Long): Boolean =
+            if (maxExclusive == null) price >= minInclusive else price >= minInclusive && price < maxExclusive
     }
 }

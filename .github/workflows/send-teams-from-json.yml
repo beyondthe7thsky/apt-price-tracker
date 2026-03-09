@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       max_items_per_group:
-        description: "평형 그룹(20/30평대)당 최대 표시 건수"
+        description: "그룹별 카드당 최대 건수"
         required: false
         default: "20"
       region_filter:
@@ -17,7 +17,7 @@ jobs:
     runs-on: [self-hosted, macOS, ARM64]
     permissions:
       contents: read
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
@@ -29,14 +29,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Send teams message from saved JSON
+      - name: Build HTML report and send split Teams cards
         shell: bash
         run: |
           python3 - <<'PY'
           import json
           import os
           import sys
+          import html
           import urllib.request
+          import textwrap
+
+          server_url = os.getenv("GITHUB_SERVER_URL", "https://github.com")
+          repository = os.getenv("GITHUB_REPOSITORY", "")
+          run_id_env = os.getenv("GITHUB_RUN_ID", "")
+          run_url = f"{server_url}/{repository}/actions/runs/{run_id_env}" if repository and run_id_env else ""
 
           webhook = (os.getenv("TEAMS_WEBHOOK_URL") or "").strip()
           if not webhook:
@@ -57,171 +64,377 @@ jobs:
 
           region_filter = (os.getenv("REGION_FILTER") or "").strip()
           max_items = int(os.getenv("MAX_ITEMS_PER_GROUP", "20"))
-          max_items = max(1, min(max_items, 50))
-          max_group_chars = 3500
+          max_items = max(1, min(max_items, 30))
+          max_group_chars = 3300
           max_body_bytes = 24000
 
-          listings = [x for x in data if isinstance(x, dict)]
-          if region_filter:
-              listings = [x for x in listings if region_filter in str(x.get("regionName", ""))]
+          def as_int(v, default=0):
+              try:
+                  return int(v)
+              except Exception:
+                  return default
 
-          listings = [x for x in listings if 20 <= int(x.get("pyeong", 0)) <= 39]
-          listings.sort(key=lambda x: str(x.get("updatedAt", "")), reverse=True)
-
-          group20 = [x for x in listings if 20 <= int(x.get("pyeong", 0)) <= 29]
-          group30 = [x for x in listings if 30 <= int(x.get("pyeong", 0)) <= 39]
-
-          if not listings:
-              print("No listings to send after filters.")
-              sys.exit(0)
+          def format_price(price_man):
+              p = as_int(price_man, 0)
+              if p < 10_000:
+                  return f"{p}만"
+              eok = p // 10_000
+              man = p % 10_000
+              return f"{eok}억" if man == 0 else f"{eok}억 {man}만"
 
           def to_line(item):
-              price = item.get("price", "")
               region = item.get("regionName", "")
               title = item.get("title", "")
               pyeong = item.get("pyeong", "")
               floor = item.get("floor", "")
               url = item.get("url", "")
-              return f"{region} {title} **{price}만** ({pyeong}평, {floor}) - [상세보기]({url})"
+              return f"{region} {title} **{format_price(item.get('price', 0))}** ({pyeong}평, {floor}) - [상세보기]({url})"
 
-          def build_text(items):
-              shown_count = 0
-              chunks = []
-              for x in items:
-                  if shown_count >= max_items:
-                      break
-                  line = to_line(x)
-                  if chunks and (len("\n\n".join(chunks)) + len(line) + 2 > max_group_chars):
-                      break
-                  chunks.append(line)
-                  shown_count += 1
-              text = "\n\n".join(chunks)
-              if len(items) > shown_count:
-                  text += f"\n\n... 외 {len(items) - shown_count}건"
-              return text
+          listings = [x for x in data if isinstance(x, dict)]
+          if region_filter:
+              listings = [x for x in listings if region_filter in str(x.get("regionName", ""))]
 
-          adaptive_body = [
-              {
-                  "type": "TextBlock",
-                  "text": "저장된 JSON 기준 매물 리포트",
-                  "weight": "Bolder",
-                  "size": "Medium",
-                  "wrap": True,
-              },
-              {
-                  "type": "TextBlock",
-                  "text": f"총 {len(listings)}건 (필터: {'없음' if not region_filter else region_filter})",
-                  "wrap": True,
-                  "spacing": "Small",
-              },
+          # 기존 봇 정책 유지: 20~39평
+          listings = [x for x in listings if 20 <= as_int(x.get("pyeong", 0), 0) <= 39]
+          listings.sort(key=lambda x: str(x.get("updatedAt", "")), reverse=True)
+
+          pyeong_bands = [
+              ("20평대", 20, 29),
+              ("30평대", 30, 39),
+          ]
+          price_bands = [
+              ("8억 미만", 0, 79_999),
+              ("8~9억대", 80_000, 89_999),
+              ("9~10억대", 90_000, 99_999),
+              ("10~12억대", 100_000, 119_999),
+              ("12억 이상", 120_000, None),
           ]
 
-          if group20:
-              adaptive_body.append(
+          grouped = []
+          for p_title, p_min, p_max in pyeong_bands:
+              p_items = [x for x in listings if p_min <= as_int(x.get("pyeong", 0), 0) <= p_max]
+              for pr_title, low, high in price_bands:
+                  if high is None:
+                      g_items = [x for x in p_items if as_int(x.get("price", 0), 0) >= low]
+                  else:
+                      g_items = [x for x in p_items if low <= as_int(x.get("price", 0), 0) <= high]
+                  if g_items:
+                      g_items.sort(key=lambda x: as_int(x.get("price", 0), 0), reverse=True)
+                      grouped.append((f"{p_title} · {pr_title}", g_items))
+
+          # HTML 리포트 생성 (지역 중심 대시보드)
+          def price_band_label(price):
+              if price < 80_000:
+                  return "8억 미만"
+              if price < 90_000:
+                  return "8~9억대"
+              if price < 100_000:
+                  return "9~10억대"
+              if price < 120_000:
+                  return "10~12억대"
+              return "12억 이상"
+
+          def pyeong_band_label(p):
+              if 20 <= p <= 29:
+                  return "20평대"
+              if 30 <= p <= 39:
+                  return "30평대"
+              return "기타"
+
+          report_rows = []
+          for it in listings:
+              region = str(it.get("regionName", ""))
+              city = region.split("_", 1)[0] if "_" in region else region
+              dong = region.split("_", 1)[1] if "_" in region else region
+              price = as_int(it.get("price", 0), 0)
+              pyeong = as_int(it.get("pyeong", 0), 0)
+              report_rows.append(
+                  {
+                      "city": city,
+                      "region": region,
+                      "dong": dong,
+                      "hscpNo": str(it.get("hscpNo", "")),
+                      "title": str(it.get("title", "")),
+                      "price": price,
+                      "priceText": format_price(price),
+                      "priceBand": price_band_label(price),
+                      "pyeong": pyeong,
+                      "pyeongBand": pyeong_band_label(pyeong),
+                      "floor": str(it.get("floor", "")),
+                      "url": str(it.get("url", "")),
+                      "updatedAt": str(it.get("updatedAt", "")),
+                  }
+              )
+
+          data_json = json.dumps(report_rows, ensure_ascii=False)
+          html_template = textwrap.dedent("""\
+          <!doctype html>
+          <html lang="ko">
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>APT Listings Report</title>
+            <style>
+              :root{
+                --bg:#f5f8fc;--line:#dbe3ee;--text:#1f2937;--muted:#64748b;--card:#fff;
+                --shadow:0 10px 24px rgba(31,41,55,.06);
+              }
+              *{box-sizing:border-box}
+              body{
+                margin:0;padding:24px;color:var(--text);
+                background:radial-gradient(circle at 20% -10%, #dbeafe 0, transparent 36%), radial-gradient(circle at 90% 0%, #dcfce7 0, transparent 34%), var(--bg);
+                font-family:"Pretendard","Apple SD Gothic Neo","Segoe UI",sans-serif;
+              }
+              .wrap{max-width:1360px;margin:0 auto}
+              h1{margin:0 0 6px;font-size:30px;letter-spacing:-.02em}
+              .meta{color:var(--muted);margin:0 0 14px}
+              .toolbar{
+                display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;
+                background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;box-shadow:var(--shadow);
+              }
+              .toolbar input,.toolbar select,.toolbar button{
+                border:1px solid #cfd8e6;border-radius:10px;padding:10px 12px;font-size:14px;background:#fff;
+              }
+              .toolbar button{cursor:pointer;background:#0f172a;color:#fff;border-color:#0f172a;font-weight:700}
+              .quick{
+                display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 14px;
+              }
+              .qchip{
+                border:1px solid #cad5e6;background:#fff;color:#334155;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;
+              }
+              .qchip.active{background:#0f172a;color:#fff;border-color:#0f172a}
+              .stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+              .stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;box-shadow:var(--shadow)}
+              .stat .k{font-size:12px;color:var(--muted)} .stat .v{font-size:20px;font-weight:800}
+              .region{
+                --accent:#475569;
+                background:var(--card);border:1px solid var(--line);border-left:6px solid var(--accent);
+                border-radius:14px;margin-bottom:12px;overflow:hidden;box-shadow:var(--shadow);
+              }
+              .head{
+                display:flex;justify-content:space-between;align-items:center;gap:10px;
+                padding:11px 13px;border-bottom:1px solid var(--line);
+                background:linear-gradient(90deg, rgba(15,23,42,.03), transparent 60%);
+              }
+              .title{font-size:18px;font-weight:800}
+              .chips{display:flex;gap:6px;flex-wrap:wrap}
+              .chip{padding:3px 8px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid}
+              .chip.city{background:rgba(15,23,42,.06);color:#0f172a;border-color:rgba(15,23,42,.12)}
+              .chip.pb-under8{background:#f0fdf4;color:#166534;border-color:#bbf7d0}
+              .chip.pb-8-9{background:#ecfeff;color:#155e75;border-color:#a5f3fc}
+              .chip.pb-9-10{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}
+              .chip.pb-10-12{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
+              .chip.pb-over12{background:#fdf2f8;color:#9d174d;border-color:#fbcfe8}
+              table{width:100%;border-collapse:collapse;font-size:13px}
+              th,td{border-bottom:1px solid #edf1f7;padding:8px 10px;text-align:left;vertical-align:top}
+              th{background:#f8fafc;color:#475569}
+              td.price{font-weight:800;white-space:nowrap}
+              td.dim{color:var(--muted);white-space:nowrap}
+              .pbadge{display:inline-block;padding:3px 7px;border-radius:999px;font-size:11px;font-weight:800;border:1px solid}
+              .p-under8{background:#f0fdf4;color:#166534;border-color:#bbf7d0}
+              .p-8-9{background:#ecfeff;color:#155e75;border-color:#a5f3fc}
+              .p-9-10{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}
+              .p-10-12{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
+              .p-over12{background:#fdf2f8;color:#9d174d;border-color:#fbcfe8}
+              a{color:#1f6feb;text-decoration:none} a:hover{text-decoration:underline}
+              .empty{background:#fff;border:1px dashed #cbd5e1;border-radius:12px;padding:24px;color:#64748b;text-align:center}
+              @media (max-width:1200px){.toolbar{grid-template-columns:repeat(3,minmax(0,1fr))}}
+              @media (max-width:800px){.toolbar{grid-template-columns:repeat(2,minmax(0,1fr))}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+            </style>
+          </head>
+          <body>
+            <div class="wrap">
+              <h1>지역별 아파트 리포트</h1>
+              <div class="meta">총 __TOTAL__건 / 실행 필터: __FILTER__</div>
+
+              <div class="toolbar">
+                <select id="city"></select>
+                <select id="region"></select>
+                <select id="priceBand"><option value="">가격대(전체)</option><option>8억 미만</option><option>8~9억대</option><option>9~10억대</option><option>10~12억대</option><option>12억 이상</option></select>
+                <select id="pyeongBand"><option value="">평형(전체)</option><option>20평대</option><option>30평대</option></select>
+                <select id="sortBy"><option value="price_desc">정렬: 가격 높은순</option><option value="price_asc">정렬: 가격 낮은순</option><option value="updated_desc">정렬: 최신순</option><option value="pyeong_desc">정렬: 평형 큰순</option><option value="region_asc">정렬: 지역 가나다</option></select>
+                <input id="q" placeholder="지역/단지명 검색"/>
+                <button id="resetBtn">필터 초기화</button>
+              </div>
+
+              <div class="quick" id="quickFilters"></div>
+
+              <div class="stats">
+                <div class="stat"><div class="k">필터 결과</div><div class="v" id="sTotal">0</div></div>
+                <div class="stat"><div class="k">지역 수</div><div class="v" id="sRegions">0</div></div>
+                <div class="stat"><div class="k">최고가</div><div class="v" id="sMax">-</div></div>
+                <div class="stat"><div class="k">최저가</div><div class="v" id="sMin">-</div></div>
+              </div>
+              <div id="regions"></div>
+            </div>
+
+            <script>
+              const RAW = __DATA__;
+              const cityEl=document.getElementById('city'),regionEl=document.getElementById('region'),priceEl=document.getElementById('priceBand'),pyeongEl=document.getElementById('pyeongBand'),sortEl=document.getElementById('sortBy'),qEl=document.getElementById('q'),regionsEl=document.getElementById('regions');
+              const quickEl=document.getElementById('quickFilters'),resetBtn=document.getElementById('resetBtn');
+              const sTotal=document.getElementById('sTotal'),sRegions=document.getElementById('sRegions'),sMax=document.getElementById('sMax'),sMin=document.getElementById('sMin');
+              const PRICE_BANDS=["8억 미만","8~9억대","9~10억대","10~12억대","12억 이상"];
+              const PYEONG_BANDS=["20평대","30평대"];
+              const CITY_COLOR={ "수원":"#2563eb","용인수지":"#0f766e","서울양천":"#9333ea","서울강서":"#0284c7","서울영등포":"#0891b2","서울동작":"#dc2626","서울관악":"#ea580c","서울구로":"#16a34a","서울금천":"#ca8a04","서울성동":"#4f46e5","서울마포":"#7c3aed","서울용산":"#be123c","서울은평":"#0d9488","서울강동":"#1d4ed8","서울동대문":"#c2410c","서울광진":"#7e22ce","서울서대문":"#0f766e","서울성북":"#475569" };
+              const esc=(s)=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+              const uniq=(a)=>Array.from(new Set(a)).sort((x,y)=>String(x).localeCompare(String(y),'ko'));
+              const fmtPrice=(n)=>{n=Number(n||0);if(n<10000)return `${n}만`;const e=Math.floor(n/10000),m=n%10000;return m===0?`${e}억`:`${e}억 ${m}만`;};
+              const mapUrl=(row)=>`https://map.naver.com/p/search/${encodeURIComponent(`${row.region} ${row.title}`)}`;
+              const pClass=(band)=>({"8억 미만":"under8","8~9억대":"8-9","9~10억대":"9-10","10~12억대":"10-12","12억 이상":"over12"}[band]||"under8");
+              function cityColor(city){ if(CITY_COLOR[city]) return CITY_COLOR[city]; const palette=["#2563eb","#0f766e","#9333ea","#0284c7","#dc2626","#16a34a","#ea580c"]; let h=0; for(const c of city) h=(h*31+c.charCodeAt(0))>>>0; return palette[h%palette.length]; }
+              function fillCities(){const c=uniq(RAW.map(x=>x.city));cityEl.innerHTML=`<option value="">도시(전체)</option>`+c.map(v=>`<option>${esc(v)}</option>`).join('');}
+              function fillRegions(){const city=cityEl.value;const src=city?RAW.filter(x=>x.city===city):RAW;const r=uniq(src.map(x=>x.region));const prev=regionEl.value;regionEl.innerHTML=`<option value="">지역(전체)</option>`+r.map(v=>`<option>${esc(v)}</option>`).join('');if(r.includes(prev))regionEl.value=prev;}
+              function filtered(){const city=cityEl.value,region=regionEl.value,priceBand=priceEl.value,pyeongBand=pyeongEl.value,q=qEl.value.trim().toLowerCase();return RAW.filter(x=>{if(city&&x.city!==city)return false;if(region&&x.region!==region)return false;if(priceBand&&x.priceBand!==priceBand)return false;if(pyeongBand&&x.pyeongBand!==pyeongBand)return false;if(q&&!`${x.region} ${x.title}`.toLowerCase().includes(q))return false;return true;});}
+              function sortRows(rows){const v=sortEl.value;const arr=[...rows];arr.sort((a,b)=>{if(v==="price_asc")return Number(a.price)-Number(b.price);if(v==="updated_desc")return String(b.updatedAt).localeCompare(String(a.updatedAt));if(v==="pyeong_desc")return Number(b.pyeong)-Number(a.pyeong)||Number(b.price)-Number(a.price);if(v==="region_asc"){const rc=String(a.region).localeCompare(String(b.region),'ko');return rc!==0?rc:Number(b.price)-Number(a.price);}return Number(b.price)-Number(a.price);});return arr;}
+              function buildQuick(){const items=[{l:"전체",p:"",y:""},{l:"20평·8억미만",p:"8억 미만",y:"20평대"},{l:"20평·8~9억",p:"8~9억대",y:"20평대"},{l:"30평·9~10억",p:"9~10억대",y:"30평대"},{l:"30평·10~12억",p:"10~12억대",y:"30평대"},{l:"30평·12억+",p:"12억 이상",y:"30평대"}]; quickEl.innerHTML=items.map((it,idx)=>`<button class="qchip ${idx===0?'active':''}" data-p="${it.p}" data-y="${it.y}">${it.l}</button>`).join(''); quickEl.querySelectorAll('.qchip').forEach(btn=>btn.addEventListener('click',()=>{quickEl.querySelectorAll('.qchip').forEach(x=>x.classList.remove('active'));btn.classList.add('active');priceEl.value=btn.dataset.p;pyeongEl.value=btn.dataset.y;render();}));}
+              function render(){const rows=sortRows(filtered());const g=new Map();for(const r of rows){if(!g.has(r.region))g.set(r.region,[]);g.get(r.region).push(r);}
+                sTotal.textContent=String(rows.length);sRegions.textContent=String(g.size);if(rows.length){const p=rows.map(x=>Number(x.price));sMax.textContent=fmtPrice(Math.max(...p));sMin.textContent=fmtPrice(Math.min(...p));}else{sMax.textContent='-';sMin.textContent='-';}
+                if(!rows.length){regionsEl.innerHTML='<div class="empty">조건에 맞는 데이터가 없습니다.</div>';return;}
+                regionsEl.innerHTML=[...g.entries()].map(([name,items])=>{const city=items[0]?.city||"";const accent=cityColor(city);const cnt={};for(const it of items)cnt[it.priceBand]=(cnt[it.priceBand]||0)+1;const chips=[`<span class="chip city">${esc(city)}</span>`].concat(Object.entries(cnt).sort((a,b)=>a[0].localeCompare(b[0],'ko')).map(([k,v])=>`<span class="chip pb-${pClass(k)}">${esc(k)} ${v}건</span>`)).join('');
+                  const rowsHtml=items.map(it=>`<tr><td>${esc(it.city)}</td><td>${esc(it.title)}</td><td class="price">${esc(it.priceText)}</td><td><span class="pbadge p-${pClass(it.priceBand)}">${esc(it.priceBand)}</span></td><td class="dim">${esc(it.pyeong)}평 / ${esc(it.floor)}</td><td><a href="${esc(it.url)}" target="_blank">매물</a></td><td><a href="${esc(mapUrl(it))}" target="_blank">지도</a></td></tr>`).join('');
+                  return `<section class="region" style="--accent:${accent};"><div class="head"><div class="title">${esc(name)} <span style="color:#64748b;font-size:13px;">(${items.length}건)</span></div><div class="chips">${chips}</div></div><table><thead><tr><th>도시</th><th>단지/매물</th><th>가격</th><th>가격대</th><th>평형/층</th><th>매물</th><th>지도</th></tr></thead><tbody>${rowsHtml}</tbody></table></section>`;}).join('');}
+              cityEl.addEventListener('change',()=>{fillRegions();render();});
+              [regionEl,priceEl,pyeongEl,sortEl].forEach(el=>el.addEventListener('change',render));
+              qEl.addEventListener('input',render);
+              resetBtn.addEventListener('click',()=>{cityEl.value="";fillRegions();regionEl.value="";priceEl.value="";pyeongEl.value="";sortEl.value="price_desc";qEl.value="";quickEl.querySelectorAll('.qchip').forEach((x,i)=>x.classList.toggle('active',i===0));render();});
+              fillCities(); fillRegions(); buildQuick(); render();
+            </script>
+          </body>
+          </html>
+          """)
+          html_doc = (
+              html_template
+              .replace("__DATA__", data_json)
+              .replace("__TOTAL__", str(len(listings)))
+              .replace("__FILTER__", html.escape(region_filter) if region_filter else "없음")
+          )
+          with open("data/apt-listings-report.html", "w", encoding="utf-8") as f:
+              f.write(html_doc)
+
+          if not grouped:
+              print("No grouped data to send. HTML report only.")
+              sys.exit(0)
+
+          def split_items(items):
+              chunks = []
+              current = []
+              current_len = 0
+              for it in items:
+                  line = to_line(it)
+                  line_len = len(line) + 2
+                  exceed_count = len(current) >= max_items
+                  exceed_chars = len(current) > 0 and (current_len + line_len > max_group_chars)
+                  if exceed_count or exceed_chars:
+                      chunks.append(current)
+                      current = []
+                      current_len = 0
+                  current.append(it)
+                  current_len += line_len
+              if current:
+                  chunks.append(current)
+              return chunks
+
+          def build_payload(section_title, section_text):
+              body = [
                   {
                       "type": "TextBlock",
-                      "text": f"🏠 20평대 (총 {len(group20)}건)",
+                      "text": "저장된 JSON 기준 매물 리포트",
+                      "weight": "Bolder",
+                      "size": "Medium",
+                      "wrap": True,
+                  },
+                  {
+                      "type": "TextBlock",
+                      "text": f"총 {len(listings)}건 (필터: {'없음' if not region_filter else region_filter})",
+                      "wrap": True,
+                      "spacing": "Small",
+                  },
+                  {
+                      "type": "TextBlock",
+                      "text": section_title,
                       "weight": "Bolder",
                       "wrap": True,
                       "spacing": "Medium",
-                  }
-              )
-              adaptive_body.append(
+                  },
                   {
                       "type": "TextBlock",
-                      "text": build_text(group20),
+                      "text": section_text,
                       "wrap": True,
                       "spacing": "Small",
-                  }
-              )
-
-          if group30:
-              adaptive_body.append(
-                  {
-                      "type": "TextBlock",
-                      "text": f"🏢 30평대 (총 {len(group30)}건)",
-                      "weight": "Bolder",
-                      "wrap": True,
-                      "spacing": "Medium",
-                  }
-              )
-              adaptive_body.append(
-                  {
-                      "type": "TextBlock",
-                      "text": build_text(group30),
-                      "wrap": True,
-                      "spacing": "Small",
-                  }
-              )
-
-          payload = {
-              "type": "message",
-              "attachments": [
-                  {
-                      "contentType": "application/vnd.microsoft.card.adaptive",
-                      "contentUrl": None,
-                      "content": {
-                          "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                          "type": "AdaptiveCard",
-                          "version": "1.4",
-                          "body": adaptive_body,
-                      },
-                  }
-              ],
-          }
-
-          body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-          if len(body) > max_body_bytes:
-              payload = {
+                  },
+              ]
+              if run_url:
+                  body.append(
+                      {
+                          "type": "TextBlock",
+                          "text": f"HTML 리포트: {run_url} (Artifacts)",
+                          "wrap": True,
+                          "spacing": "Small",
+                      }
+                  )
+              content = {
+                  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                  "type": "AdaptiveCard",
+                  "version": "1.4",
+                  "body": body,
+              }
+              if run_url:
+                  content["actions"] = [
+                      {
+                          "type": "Action.OpenUrl",
+                          "title": "실행/아티팩트 열기",
+                          "url": run_url,
+                      }
+                  ]
+              return {
                   "type": "message",
                   "attachments": [
                       {
                           "contentType": "application/vnd.microsoft.card.adaptive",
                           "contentUrl": None,
-                          "content": {
-                              "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                              "type": "AdaptiveCard",
-                              "version": "1.4",
-                              "body": [
-                                  {
-                                      "type": "TextBlock",
-                                      "text": "저장된 JSON 기준 매물 리포트 (요약)",
-                                      "weight": "Bolder",
-                                      "size": "Medium",
-                                      "wrap": True,
-                                  },
-                                  {
-                                      "type": "TextBlock",
-                                      "text": f"총 {len(listings)}건 (필터: {'없음' if not region_filter else region_filter})",
-                                      "wrap": True,
-                                      "spacing": "Small",
-                                  },
-                                  {
-                                      "type": "TextBlock",
-                                      "text": f"🏠 20평대: {len(group20)}건\n🏢 30평대: {len(group30)}건\n\n메시지 길이 제한으로 상세 목록은 생략되었습니다.",
-                                      "wrap": True,
-                                      "spacing": "Medium",
-                                  },
-                              ],
-                          },
+                          "content": content,
                       }
                   ],
               }
+
+          payloads = []
+          for group_title, items in grouped:
+              chunks = split_items(items)
+              for idx, chunk in enumerate(chunks):
+                  title = f"{group_title} (총 {len(items)}건)"
+                  if len(chunks) > 1:
+                      title += f" {idx + 1}/{len(chunks)}"
+                  text = "\n\n".join(to_line(x) for x in chunk)
+                  payloads.append(build_payload(title, text))
+
+          success = 0
+          for i, payload in enumerate(payloads, start=1):
               body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+              if len(body) > max_body_bytes:
+                  print(f"skip payload[{i}] - too large: {len(body)} bytes")
+                  continue
+              req = urllib.request.Request(
+                  webhook,
+                  data=body,
+                  headers={"Content-Type": "application/json"},
+                  method="POST",
+              )
+              with urllib.request.urlopen(req, timeout=30) as resp:
+                  status = getattr(resp, "status", None) or resp.getcode()
+                  if status < 200 or status >= 300:
+                      print(f"Teams request failed at {i}/{len(payloads)}. status={status}")
+                      sys.exit(1)
+                  success += 1
+                  print(f"sent {i}/{len(payloads)} status={status}")
 
-          print(f"payload_bytes={len(body)}")
-          req = urllib.request.Request(
-              webhook,
-              data=body,
-              headers={"Content-Type": "application/json"},
-              method="POST",
-          )
-
-          with urllib.request.urlopen(req, timeout=30) as resp:
-              status = getattr(resp, "status", None) or resp.getcode()
-              run_id = resp.headers.get("x-ms-workflow-run-id", "")
-              if status < 200 or status >= 300:
-                  print(f"Teams request failed. status={status}")
-                  sys.exit(1)
-              print(f"Teams message accepted. status={status}, run_id={run_id}, total={len(listings)}, 20평대={len(group20)}, 30평대={len(group30)}")
+          summary = ", ".join([f"{t}={len(i)}" for t, i in grouped])
+          print(f"Teams split send complete. success={success}/{len(payloads)}, total={len(listings)}, {summary}")
+          print("HTML report generated: data/apt-listings-report.html")
           PY
+
+      - name: Upload HTML report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apt-listings-report
+          path: data/apt-listings-report.html
+          if-no-files-found: error
