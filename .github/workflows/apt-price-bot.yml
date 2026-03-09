@@ -80,15 +80,17 @@ jobs:
                 run_offset="0"
                 ;;
             esac
+            run_rotate="true"
           else
             run_max="${INPUT_MAX_REGIONS:-0}"
             run_offset="${INPUT_START_OFFSET:-0}"
+            run_rotate="false"
           fi
 
           echo "RUN_MAX_REGIONS=${run_max}" >> "$GITHUB_ENV"
           echo "RUN_START_OFFSET=${run_offset}" >> "$GITHUB_ENV"
-          echo "RUN_ROTATE_BY_DAY=true" >> "$GITHUB_ENV"
-          echo "Resolved config: max=${run_max}, offset=${run_offset}, schedule=${EVENT_SCHEDULE}"
+          echo "RUN_ROTATE_BY_DAY=${run_rotate}" >> "$GITHUB_ENV"
+          echo "Resolved config: max=${run_max}, offset=${run_offset}, rotate=${run_rotate}, schedule=${EVENT_SCHEDULE}"
 
       - name: Run bot
         env:
