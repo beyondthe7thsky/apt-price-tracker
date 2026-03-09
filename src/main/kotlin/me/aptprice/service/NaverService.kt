@@ -66,6 +66,9 @@ class NaverService(private val objectMapper: ObjectMapper) {
     @Volatile
     private var blockedUntilEpochMillis: Long = 0
 
+    fun abuseCooldownRemainingMillis(nowMillis: Long = System.currentTimeMillis()): Long =
+        (blockedUntilEpochMillis - nowMillis).coerceAtLeast(0L)
+
     fun fetchListings(regionName: String, cortarNo: String): List<Listing> {
         val now = System.currentTimeMillis()
         if (now < blockedUntilEpochMillis) {

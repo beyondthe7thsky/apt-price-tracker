@@ -74,10 +74,13 @@
 - `bot.safe.max-regions-per-run`: 기본 `0` (전체 동 실행)
 - `bot.safe.rotate-start-by-day`: 기본 `true` (매일 시작 동 순환)
 - `bot.safe.start-region-offset`: 추가 시작 오프셋
+- `bot.safe.retry-region-after-abuse`: 차단 시 지역 재시도 활성화
+- `bot.safe.max-abuse-retry-per-region`: 차단 시 지역별 최대 재시도 횟수
+- `bot.safe.max-abuse-wait-ms`: 차단 재시도 전 최대 대기 시간
 - `bot.market.off-market-confirm-miss-count`: 소진추정 전환 임계치
-- `naver.safe.abuse-cooldown-minutes`: abuse 감지 후 쿨다운(기본 `30`분)
+- `naver.safe.abuse-cooldown-minutes`: abuse 감지 후 쿨다운(기본 `8`분)
 - `naver.safe.request-timeout-ms`: 요청 타임아웃
-- `naver.safe.max-complexes-per-region`: 지역별 단지 수집 상한
+- `naver.safe.max-complexes-per-region`: 지역별 단지 수집 상한(기본 `25`)
 - `naver.safe.rotate-complexes-by-day`: 단지 상한 적용 시 일자별 수집 단지 순환
 
 ## 로컬 실행

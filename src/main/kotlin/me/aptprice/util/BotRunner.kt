@@ -25,6 +25,9 @@ class BotRunner(
     @Value("\${bot.safe.max-regions-per-run:0}") private val maxRegionsPerRun: Int,
     @Value("\${bot.safe.rotate-start-by-day:true}") private val rotateStartByDay: Boolean,
     @Value("\${bot.safe.start-region-offset:0}") private val startRegionOffset: Int,
+    @Value("\${bot.safe.retry-region-after-abuse:true}") private val retryRegionAfterAbuse: Boolean,
+    @Value("\${bot.safe.max-abuse-retry-per-region:1}") private val maxAbuseRetryPerRegion: Int,
+    @Value("\${bot.safe.max-abuse-wait-ms:480000}") private val maxAbuseWaitMs: Long,
     @Value("\${bot.safe.region-delay-min-ms:5000}") private val regionDelayMinMs: Long,
     @Value("\${bot.safe.region-delay-max-ms:9000}") private val regionDelayMaxMs: Long,
     @Value("\${bot.market.off-market-confirm-miss-count:3}") private val offMarketConfirmMissCount: Int,
@@ -148,17 +151,50 @@ class BotRunner(
         val allNewListings = mutableListOf<Listing>()
         val successfulRegions = mutableSetOf<String>()
         var blockedByAbuse = false
+        var abuseSkippedRegions = 0
 
         for ((index, region) in runRegions.withIndex()) {
             val regionName = region["name"]!!
-            val listings = try {
-                naverService.fetchListings(regionName, region["code"]!!)
-            } catch (e: AbuseBlockedException) {
-                blockedByAbuse = true
-                log.warn("{} 수집 중단: {}", regionName, e.message)
-                break
-            } catch (e: RegionFetchFailedException) {
-                log.warn("{} 수집 실패(기존 데이터 유지): {}", regionName, e.message)
+
+            var listings: List<Listing>? = null
+            var abuseAttempt = 0
+            while (true) {
+                try {
+                    listings = naverService.fetchListings(regionName, region["code"]!!)
+                    break
+                } catch (e: AbuseBlockedException) {
+                    blockedByAbuse = true
+                    val remainMs = naverService.abuseCooldownRemainingMillis()
+                    val allowRetry = retryRegionAfterAbuse &&
+                        abuseAttempt < maxAbuseRetryPerRegion.coerceAtLeast(0) &&
+                        remainMs > 0
+
+                    if (allowRetry) {
+                        val waitMs = remainMs.coerceAtMost(maxAbuseWaitMs.coerceAtLeast(0L))
+                        log.warn(
+                            "{} 차단 감지: {}ms 대기 후 재시도 ({}/{})",
+                            regionName,
+                            waitMs,
+                            abuseAttempt + 1,
+                            maxAbuseRetryPerRegion + 1
+                        )
+                        if (waitMs > 0) {
+                            Thread.sleep(waitMs)
+                        }
+                        abuseAttempt += 1
+                        continue
+                    }
+
+                    abuseSkippedRegions += 1
+                    log.warn("{} 수집 스킵(차단): {}", regionName, e.message)
+                    break
+                } catch (e: RegionFetchFailedException) {
+                    log.warn("{} 수집 실패(기존 데이터 유지): {}", regionName, e.message)
+                    break
+                }
+            }
+
+            if (listings == null) {
                 continue
             }
             successfulRegions.add(regionName)
@@ -266,6 +302,9 @@ class BotRunner(
             offMarketChanged,
             relistedChanged
         )
+        if (abuseSkippedRegions > 0) {
+            log.warn("이번 실행에서 abuse 차단으로 스킵된 지역: {}개", abuseSkippedRegions)
+        }
     }
 
     private fun normalizedDelayRange(minMs: Long, maxMs: Long, defaultMinMs: Long, defaultMaxMs: Long): Pair<Long, Long> {
