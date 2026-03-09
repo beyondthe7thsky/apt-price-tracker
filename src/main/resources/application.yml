@@ -20,5 +20,5 @@ naver:
     complex-delay-max-ms: 9000
     page-delay-min-ms: 1500
     page-delay-max-ms: 3500
-    request-timeout-ms: 15000
+    request-timeout-ms: 30000
     abuse-cooldown-minutes: 30

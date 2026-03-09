@@ -10,6 +10,7 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.net.http.HttpTimeoutException
 import java.time.Duration
 import kotlin.math.roundToInt
 import kotlin.random.Random
@@ -21,7 +22,8 @@ class NaverService(private val objectMapper: ObjectMapper) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val random = Random(System.currentTimeMillis())
     private val httpClient = HttpClient.newBuilder()
-        .connectTimeout(Duration.ofSeconds(10))
+        .connectTimeout(Duration.ofSeconds(20))
+        .version(HttpClient.Version.HTTP_1_1)
         .build()
     @Value("\${naver.safe.max-attempts:2}")
     private var maxAttempts: Int = 2
@@ -50,8 +52,8 @@ class NaverService(private val objectMapper: ObjectMapper) {
     @Value("\${naver.safe.page-delay-max-ms:3500}")
     private var pageDelayMaxMs: Long = 3_500L
 
-    @Value("\${naver.safe.request-timeout-ms:15000}")
-    private var requestTimeoutMs: Long = 15_000L
+    @Value("\${naver.safe.request-timeout-ms:30000}")
+    private var requestTimeoutMs: Long = 30_000L
 
     @Value("\${naver.safe.abuse-cooldown-minutes:30}")
     private var abuseCooldownMinutes: Long = 30L
@@ -104,6 +106,10 @@ class NaverService(private val objectMapper: ObjectMapper) {
         if (response.blockedByAbuse) {
             throw AbuseBlockedException("${regionName} 단지 목록 조회가 abuse 차단으로 중단됨")
         }
+        if (response.timedOut) {
+            log.warn("{} 단지 목록 조회 타임아웃으로 스킵합니다.", regionName)
+            return emptyList()
+        }
         val body = response.body ?: return emptyList()
 
         val root = runCatching { objectMapper.readTree(body) }.getOrElse {
@@ -132,6 +138,10 @@ class NaverService(private val objectMapper: ObjectMapper) {
             val response = requestBodyWithRetry(url, "https://m.land.naver.com/complex/info/${complex.hscpNo}")
             if (response.blockedByAbuse) {
                 return ArticleFetchResult(listings = listings, blockedByAbuse = true)
+            }
+            if (response.timedOut) {
+                log.warn("{} {} 페이지 {} 조회 타임아웃으로 단지 수집을 중단합니다.", regionName, complex.hscpNm, page)
+                break
             }
             val body = response.body ?: break
 
@@ -184,6 +194,7 @@ class NaverService(private val objectMapper: ObjectMapper) {
 
     private fun requestBodyWithRetry(url: String, referer: String): RequestResult {
         var lastBodySnippet = ""
+        var sawTimeout = false
 
         for (attempt in 1..maxAttempts.coerceAtLeast(1)) {
             try {
@@ -233,6 +244,11 @@ class NaverService(private val objectMapper: ObjectMapper) {
 
                 log.error("요청 실패 상태코드({}). url={} location={} body={}", status, url, location, lastBodySnippet)
                 return RequestResult(body = null)
+            } catch (e: HttpTimeoutException) {
+                sawTimeout = true
+                val backoff = backoffMillis(attempt)
+                log.warn("요청 타임아웃(시도 {}/{}): {} - {}ms 대기. url={}", attempt, maxAttempts, e.message, backoff, url)
+                Thread.sleep(backoff)
             } catch (e: Exception) {
                 val backoff = backoffMillis(attempt)
                 log.warn("요청 오류(시도 {}/{}): {} - {}ms 대기. url={}", attempt, maxAttempts, e.message, backoff, url)
@@ -240,8 +256,13 @@ class NaverService(private val objectMapper: ObjectMapper) {
             }
         }
 
-        log.warn("최대 재시도 소진(차단 가능성). url={} lastBody={}", url, lastBodySnippet)
-        return RequestResult(body = null, blockedByAbuse = true)
+        if (sawTimeout) {
+            log.warn("최대 재시도 소진(타임아웃). url={} lastBody={}", url, lastBodySnippet)
+            return RequestResult(body = null, timedOut = true)
+        }
+
+        log.warn("최대 재시도 소진(응답 없음/오류). url={} lastBody={}", url, lastBodySnippet)
+        return RequestResult(body = null)
     }
 
     private fun backoffMillis(attempt: Int): Long {
@@ -287,7 +308,8 @@ class NaverService(private val objectMapper: ObjectMapper) {
 
     private data class RequestResult(
         val body: String?,
-        val blockedByAbuse: Boolean = false
+        val blockedByAbuse: Boolean = false,
+        val timedOut: Boolean = false
     )
 
     companion object {
