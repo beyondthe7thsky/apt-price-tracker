@@ -1,0 +1,24 @@
+spring:
+  main:
+    web-application-type: none
+
+bot:
+  enabled: true
+  safe:
+    max-regions-per-run: 2
+    region-delay-min-ms: 20000
+    region-delay-max-ms: 60000
+
+naver:
+  safe:
+    max-attempts: 2
+    base-backoff-ms: 2000
+    backoff-jitter-ms: 1500
+    max-complex-pages: 1
+    max-complexes-per-region: 8
+    complex-delay-min-ms: 4000
+    complex-delay-max-ms: 9000
+    page-delay-min-ms: 1500
+    page-delay-max-ms: 3500
+    request-timeout-ms: 15000
+    abuse-cooldown-minutes: 30
