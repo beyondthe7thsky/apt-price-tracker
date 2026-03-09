@@ -1,0 +1,139 @@
+name: send-teams-from-json
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_items_per_group:
+        description: "평형 그룹(20/30평대)당 최대 표시 건수"
+        required: false
+        default: "60"
+      region_filter:
+        description: "지역명 포함 필터 (예: 수원_매탄동). 비우면 전체"
+        required: false
+        default: ""
+
+jobs:
+  notify:
+    runs-on: [self-hosted, macOS, ARM64]
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    env:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      MAX_ITEMS_PER_GROUP: ${{ github.event.inputs.max_items_per_group || '60' }}
+      REGION_FILTER: ${{ github.event.inputs.region_filter || '' }}
+      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Send teams message from saved JSON
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.request
+
+          webhook = (os.getenv("TEAMS_WEBHOOK_URL") or "").strip()
+          if not webhook:
+              print("TEAMS_WEBHOOK_URL secret is empty.")
+              sys.exit(1)
+
+          path = "data/apt-listings.json"
+          try:
+              with open(path, "r", encoding="utf-8") as f:
+                  data = json.load(f)
+          except FileNotFoundError:
+              print(f"{path} not found.")
+              sys.exit(1)
+
+          if not isinstance(data, list):
+              print("data/apt-listings.json is not a JSON array.")
+              sys.exit(1)
+
+          region_filter = (os.getenv("REGION_FILTER") or "").strip()
+          max_items = int(os.getenv("MAX_ITEMS_PER_GROUP", "60"))
+          max_items = max(1, min(max_items, 200))
+
+          listings = [x for x in data if isinstance(x, dict)]
+          if region_filter:
+              listings = [x for x in listings if region_filter in str(x.get("regionName", ""))]
+
+          listings = [x for x in listings if 20 <= int(x.get("pyeong", 0)) <= 39]
+          listings.sort(key=lambda x: str(x.get("updatedAt", "")), reverse=True)
+
+          group20 = [x for x in listings if 20 <= int(x.get("pyeong", 0)) <= 29]
+          group30 = [x for x in listings if 30 <= int(x.get("pyeong", 0)) <= 39]
+
+          if not listings:
+              print("No listings to send after filters.")
+              sys.exit(0)
+
+          def to_line(item):
+              price = item.get("price", "")
+              region = item.get("regionName", "")
+              title = item.get("title", "")
+              pyeong = item.get("pyeong", "")
+              floor = item.get("floor", "")
+              url = item.get("url", "")
+              return f"{region} {title} **{price}만** ({pyeong}평, {floor}) - [상세보기]({url})"
+
+          def build_text(items):
+              shown = items[:max_items]
+              lines = [to_line(x) for x in shown]
+              text = "\n\n".join(lines)
+              if len(items) > len(shown):
+                  text += f"\n\n... 외 {len(items) - len(shown)}건"
+              return text
+
+          sections = [
+              {
+                  "activityTitle": "저장된 JSON 기준 매물 리포트",
+                  "text": f"총 {len(listings)}건 (필터: {'없음' if not region_filter else region_filter})",
+                  "markdown": True,
+              }
+          ]
+
+          if group20:
+              sections.append(
+                  {
+                      "activityTitle": f"🏠 20평대 (총 {len(group20)}건)",
+                      "text": build_text(group20),
+                      "markdown": True,
+                  }
+              )
+          if group30:
+              sections.append(
+                  {
+                      "activityTitle": f"🏢 30평대 (총 {len(group30)}건)",
+                      "text": build_text(group30),
+                      "markdown": True,
+                  }
+              )
+
+          payload = {
+              "@type": "MessageCard",
+              "themeColor": "0076D7",
+              "summary": "저장된 JSON 기준 매물 리포트",
+              "sections": sections,
+          }
+
+          body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+          req = urllib.request.Request(
+              webhook,
+              data=body,
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+
+          with urllib.request.urlopen(req, timeout=30) as resp:
+              status = getattr(resp, "status", None) or resp.getcode()
+              if status < 200 or status >= 300:
+                  print(f"Teams request failed. status={status}")
+                  sys.exit(1)
+              print(f"Teams message sent. status={status}, total={len(listings)}, 20평대={len(group20)}, 30평대={len(group30)}")
+          PY
