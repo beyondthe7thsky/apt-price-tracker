@@ -6,13 +6,15 @@ bot:
   enabled: true
   safe:
     max-regions-per-run: 0
-    rotate-start-by-day: true
+    rotate-start-by-day: false
     start-region-offset: 0
-    retry-region-after-abuse: true
-    max-abuse-retry-per-region: 1
-    max-abuse-wait-ms: 300000
-    replay-abuse-skipped-regions: true
-    max-abuse-replay-rounds: 2
+    retry-region-after-abuse: false
+    max-abuse-retry-per-region: 0
+    max-abuse-wait-ms: 0
+    stop-run-on-abuse: true
+    replay-abuse-skipped-regions: false
+    max-abuse-replay-rounds: 0
+    save-run-progress: true
     region-delay-min-ms: 3000
     region-delay-max-ms: 6000
 
@@ -29,6 +31,9 @@ naver:
     rotate-complexes-by-day: true
     complex-delay-min-ms: 700
     complex-delay-max-ms: 1500
+    complex-batch-size: 6
+    batch-cooldown-min-ms: 8000
+    batch-cooldown-max-ms: 15000
     overflow-complex-delay-min-ms: 1000
     overflow-complex-delay-max-ms: 2200
     page-delay-min-ms: 500

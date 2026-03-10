@@ -12,6 +12,7 @@ import java.nio.file.Paths
 class FileDataRepository(private val objectMapper: ObjectMapper) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val filePath = Paths.get("data/apt-listings.json")
+    private val runProgressPath = Paths.get("data/run-progress.json")
 
     fun loadAll(): Map<String, Listing> {
         if (!Files.exists(filePath)) return emptyMap()
@@ -24,4 +25,31 @@ class FileDataRepository(private val objectMapper: ObjectMapper) {
         objectMapper.writerWithDefaultPrettyPrinter().writeValue(filePath.toFile(), listings)
         log.info("JSON 저장 완료 ({}건)", listings.size)
     }
+
+    fun loadRunProgress(): RunProgress? {
+        if (!Files.exists(runProgressPath)) return null
+        return runCatching { objectMapper.readValue<RunProgress>(runProgressPath.toFile()) }
+            .onFailure { log.warn("run-progress 로드 실패: {}", it.message) }
+            .getOrNull()
+    }
+
+    fun saveRunProgress(progress: RunProgress) {
+        if (!Files.exists(runProgressPath.parent)) Files.createDirectories(runProgressPath.parent)
+        objectMapper.writerWithDefaultPrettyPrinter().writeValue(runProgressPath.toFile(), progress)
+        log.info(
+            "run-progress 저장 완료 (nextOffset={}, reason={}, blockedRegion={})",
+            progress.nextStartRegionOffset,
+            progress.reason,
+            progress.blockedRegionName ?: "-"
+        )
+    }
+
+    data class RunProgress(
+        val nextStartRegionOffset: Int = 0,
+        val totalRegions: Int = 0,
+        val lastRunAt: String = "",
+        val lastRegionName: String = "",
+        val reason: String = "UNKNOWN",
+        val blockedRegionName: String? = null,
+    )
 }

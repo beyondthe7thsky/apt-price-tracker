@@ -28,8 +28,10 @@ class BotRunner(
     @Value("\${bot.safe.retry-region-after-abuse:true}") private val retryRegionAfterAbuse: Boolean,
     @Value("\${bot.safe.max-abuse-retry-per-region:1}") private val maxAbuseRetryPerRegion: Int,
     @Value("\${bot.safe.max-abuse-wait-ms:480000}") private val maxAbuseWaitMs: Long,
+    @Value("\${bot.safe.stop-run-on-abuse:true}") private val stopRunOnAbuse: Boolean,
     @Value("\${bot.safe.replay-abuse-skipped-regions:true}") private val replayAbuseSkippedRegionsEnabled: Boolean,
     @Value("\${bot.safe.max-abuse-replay-rounds:2}") private val maxAbuseReplayRounds: Int,
+    @Value("\${bot.safe.save-run-progress:true}") private val saveRunProgressEnabled: Boolean,
     @Value("\${bot.safe.region-delay-min-ms:5000}") private val regionDelayMinMs: Long,
     @Value("\${bot.safe.region-delay-max-ms:9000}") private val regionDelayMaxMs: Long,
     @Value("\${bot.market.off-market-confirm-miss-count:3}") private val offMarketConfirmMissCount: Int,
@@ -208,7 +210,25 @@ class BotRunner(
         val allNewListings = mutableListOf<Listing>()
         val successfulRegions = mutableSetOf<String>()
         var blockedByAbuse = false
+        var abortedByAbuse = false
+        var blockedRegionName: String? = null
+        var nextStartOffset = effectiveOffset
+        var lastRegionName = ""
         val abuseSkippedRegionQueue = linkedMapOf<String, Map<String, String>>()
+
+        fun persistRunProgress(reason: String, blockedRegion: String? = null) {
+            if (!saveRunProgressEnabled || totalRegions <= 0) return
+            repository.saveRunProgress(
+                FileDataRepository.RunProgress(
+                    nextStartRegionOffset = ((nextStartOffset % totalRegions) + totalRegions) % totalRegions,
+                    totalRegions = totalRegions,
+                    lastRunAt = LocalDateTime.now().toString(),
+                    lastRegionName = lastRegionName,
+                    reason = reason,
+                    blockedRegionName = blockedRegion
+                )
+            )
+        }
 
         fun saveCheckpoint(listings: List<Listing>, regionName: String) {
             val filtered = listings.filter { it.pyeong in 20..39 }
@@ -236,24 +256,42 @@ class BotRunner(
             }
         }
 
-        for ((index, region) in runRegions.withIndex()) {
+        mainLoop@ for ((index, region) in runRegions.withIndex()) {
             val regionName = region["name"]!!
             val regionCode = region["code"]!!
+            val regionAbsoluteIndex = (effectiveOffset + index) % totalRegions
+            lastRegionName = regionName
             when (val outcome = fetchRegionWithCooldownRetry(regionName, regionCode)) {
-                is RegionFetchOutcome.Success -> saveCheckpoint(outcome.listings, regionName)
+                is RegionFetchOutcome.Success -> {
+                    saveCheckpoint(outcome.listings, regionName)
+                    nextStartOffset = (regionAbsoluteIndex + 1) % totalRegions
+                    persistRunProgress("RUNNING")
+                }
                 is RegionFetchOutcome.AbuseSkipped -> {
                     blockedByAbuse = true
                     abuseSkippedRegionQueue[regionName] = region
                     log.warn("{} 수집 스킵(차단): {}", regionName, outcome.reason)
+                    if (stopRunOnAbuse) {
+                        abortedByAbuse = true
+                        blockedRegionName = regionName
+                        nextStartOffset = regionAbsoluteIndex
+                        persistRunProgress("ABUSE_ABORTED", blockedRegionName)
+                        break@mainLoop
+                    } else {
+                        nextStartOffset = (regionAbsoluteIndex + 1) % totalRegions
+                        persistRunProgress("RUNNING")
+                    }
                 }
                 is RegionFetchOutcome.Failed -> {
                     log.warn("{} 수집 실패(기존 데이터 유지): {}", regionName, outcome.reason)
+                    nextStartOffset = (regionAbsoluteIndex + 1) % totalRegions
+                    persistRunProgress("RUNNING")
                 }
             }
             waitBeforeNextRegion(index < runRegions.lastIndex)
         }
 
-        if (replayAbuseSkippedRegionsEnabled && abuseSkippedRegionQueue.isNotEmpty()) {
+        if (!stopRunOnAbuse && replayAbuseSkippedRegionsEnabled && abuseSkippedRegionQueue.isNotEmpty()) {
             val replayRounds = maxAbuseReplayRounds.coerceAtLeast(0)
             for (round in 1..replayRounds) {
                 if (abuseSkippedRegionQueue.isEmpty()) break
@@ -287,8 +325,10 @@ class BotRunner(
         if (successfulRegions.isEmpty()) {
             if (blockedByAbuse) {
                 log.warn("abuse 차단으로 성공한 지역이 없어 기존 JSON 데이터를 유지합니다.")
+                persistRunProgress("ABUSE_NO_SUCCESS", blockedRegionName)
             } else {
                 log.warn("성공한 지역이 없어 기존 JSON 데이터를 유지합니다.")
+                persistRunProgress("NO_SUCCESS")
             }
             return
         }
@@ -325,6 +365,14 @@ class BotRunner(
         val abuseSkippedRegions = abuseSkippedRegionQueue.size
         if (abuseSkippedRegions > 0) {
             log.warn("이번 실행에서 abuse 차단으로 스킵된 지역: {}개", abuseSkippedRegions)
+        }
+        if (abortedByAbuse) {
+            log.warn("abuse 감지로 실행을 조기 종료했습니다. 다음 시작 오프셋: {}", nextStartOffset)
+            persistRunProgress("ABUSE_ABORTED", blockedRegionName)
+        } else if (abuseSkippedRegions > 0) {
+            persistRunProgress("PARTIAL")
+        } else {
+            persistRunProgress("SUCCESS")
         }
     }
 

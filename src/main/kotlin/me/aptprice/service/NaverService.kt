@@ -61,6 +61,15 @@ class NaverService(private val objectMapper: ObjectMapper) {
     @Value("\${naver.safe.complex-delay-max-ms:2600}")
     private var complexDelayMaxMs: Long = 2_600L
 
+    @Value("\${naver.safe.complex-batch-size:6}")
+    private var complexBatchSize: Int = 6
+
+    @Value("\${naver.safe.batch-cooldown-min-ms:8000}")
+    private var batchCooldownMinMs: Long = 8_000L
+
+    @Value("\${naver.safe.batch-cooldown-max-ms:15000}")
+    private var batchCooldownMaxMs: Long = 15_000L
+
     @Value("\${naver.safe.overflow-complex-delay-min-ms:2600}")
     private var overflowComplexDelayMinMs: Long = 2_600L
 
@@ -134,6 +143,17 @@ class NaverService(private val objectMapper: ObjectMapper) {
                     randomDelayMs(complexDelayMinMs, complexDelayMaxMs, 4_000L, 9_000L)
                 }
                 Thread.sleep(delayMillis)
+
+                if (complexBatchSize > 0 && (index + 1) % complexBatchSize == 0) {
+                    val batchDelay = randomDelayMs(batchCooldownMinMs, batchCooldownMaxMs, 8_000L, 15_000L)
+                    log.info(
+                        "{} 지역 배치 쿨다운 {}ms ({}개 단지 처리)",
+                        regionName,
+                        batchDelay,
+                        index + 1
+                    )
+                    Thread.sleep(batchDelay)
+                }
             }
         }
 
