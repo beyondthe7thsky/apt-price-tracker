@@ -40,6 +40,9 @@ class NaverService(private val objectMapper: ObjectMapper) {
     @Value("\${naver.safe.max-complex-pages:1}")
     private var maxComplexPages: Int = 1
 
+    @Value("\${naver.safe.max-complex-pages-on-overflow:3}")
+    private var maxComplexPagesOnOverflow: Int = 3
+
     @Value("\${naver.safe.max-complexes-per-region:35}")
     private var maxComplexesPerRegion: Int = 35
 
@@ -141,8 +144,14 @@ class NaverService(private val objectMapper: ObjectMapper) {
         }
 
         val deduped = listings
-            .groupBy { it.articleNo }
-            .mapNotNull { (_, items) -> items.maxByOrNull { it.updatedAt } }
+            .groupBy { dedupKey(it) }
+            .mapNotNull { (_, items) ->
+                items.minWithOrNull(
+                    compareBy<Listing> { it.price }
+                        .thenByDescending { it.updatedAt }
+                        .thenBy { it.articleNo }
+                )
+            }
 
         log.info(
             "{} 수집 성공 - 단지 전체: {}개, 수집 대상 단지: {}개, 매물: {}건",
@@ -208,8 +217,10 @@ class NaverService(private val objectMapper: ObjectMapper) {
     private fun fetchComplexArticles(regionName: String, complex: ComplexInfo): ArticleFetchResult {
         val listings = mutableListOf<Listing>()
         var page = 1
+        val configuredMaxPages = maxComplexPages.coerceAtLeast(1)
+        var effectiveMaxPages = configuredMaxPages
 
-        while (page <= maxComplexPages.coerceAtLeast(1)) {
+        while (page <= effectiveMaxPages) {
             val url =
                 "https://m.land.naver.com/complex/getComplexArticleList?hscpNo=${complex.hscpNo}&rletTpCd=A01&tradTpCd=A1&order=prc&page=$page"
             val response = requestBodyWithRetry(url, "https://m.land.naver.com/complex/info/${complex.hscpNo}")
@@ -236,6 +247,19 @@ class NaverService(private val objectMapper: ObjectMapper) {
             }
 
             val moreDataYn = result.get("moreDataYn")?.asText("").orEmpty()
+            if (page == 1 && configuredMaxPages == 1 && moreDataYn == "Y" && list.size() >= 20) {
+                val overflowMaxPages = maxComplexPagesOnOverflow.coerceAtLeast(1)
+                if (overflowMaxPages > effectiveMaxPages) {
+                    effectiveMaxPages = overflowMaxPages
+                    log.info(
+                        "{} {} 매물량 많음(1페이지 {}건) -> 수집 페이지를 {}까지 확장",
+                        regionName,
+                        complex.hscpNm,
+                        list.size(),
+                        effectiveMaxPages
+                    )
+                }
+            }
             if (moreDataYn != "Y") break
             page += 1
             Thread.sleep(randomDelayMs(pageDelayMinMs, pageDelayMaxMs, 1_500L, 3_500L))
@@ -248,7 +272,10 @@ class NaverService(private val objectMapper: ObjectMapper) {
         val articleNo = node.get("atclNo")?.asText()?.trim().orEmpty()
         if (articleNo.isBlank()) return null
 
-        val areaSqm = node.get("spc2")?.asText()?.toDoubleOrNull() ?: 0.0
+        val areaSupplySqm = parseAreaSqm(node.get("spc1"))
+        val areaExclusiveSqm = parseAreaSqm(node.get("spc2"))
+        val areaSqm = firstPositiveArea(areaExclusiveSqm, areaSupplySqm)
+        val pyeongBaseSqm = firstPositiveArea(areaSupplySqm, areaExclusiveSqm)
         val priceText = node.get("prcInfo")?.asText("").orEmpty()
         val parsedPrice = parsePrice(priceText)
         if (parsedPrice <= 0L) return null
@@ -263,16 +290,20 @@ class NaverService(private val objectMapper: ObjectMapper) {
 
         val title = node.get("atclNm")?.asText()?.trim().orEmpty().ifBlank { complex.hscpNm }
         val floor = node.get("flrInfo")?.asText()?.trim().orEmpty()
+        val sameAddrHash = node.get("sameAddrHash")?.asText("")?.trim().orEmpty()
 
         return Listing(
             articleNo = articleNo,
             hscpNo = complex.hscpNo,
+            sameAddrHash = sameAddrHash,
             title = title,
             regionName = regionName,
             price = parsedPrice,
             floor = floor,
             areaSqm = areaSqm,
-            pyeong = (areaSqm / 3.3058).roundToInt(),
+            areaSupplySqm = areaSupplySqm,
+            areaExclusiveSqm = areaExclusiveSqm,
+            pyeong = if (pyeongBaseSqm > 0.0) (pyeongBaseSqm / 3.3058).roundToInt() else 0,
             hsehCnt = householdCount,
             url = "https://fin.land.naver.com/articles/$articleNo"
         )
@@ -388,8 +419,32 @@ class NaverService(private val objectMapper: ObjectMapper) {
         return value.coerceAtLeast(0)
     }
 
+    private fun parseAreaSqm(node: JsonNode?): Double {
+        if (node == null || node.isNull) return 0.0
+        return when {
+            node.isNumber -> node.asDouble(0.0)
+            node.isTextual -> node.asText("")
+                .replace(",", "")
+                .replace("㎡", "")
+                .trim()
+                .toDoubleOrNull() ?: 0.0
+
+            else -> 0.0
+        }.coerceAtLeast(0.0)
+    }
+
     private fun firstPositive(vararg values: Int): Int =
         values.firstOrNull { it > 0 } ?: 0
+
+    private fun firstPositiveArea(vararg values: Double): Double =
+        values.firstOrNull { it > 0.0 } ?: 0.0
+
+    private fun dedupKey(listing: Listing): String {
+        if (listing.sameAddrHash.isNotBlank()) {
+            return "HASH:${listing.hscpNo}:${listing.sameAddrHash}"
+        }
+        return "ATCL:${listing.articleNo}"
+    }
 
     private fun resolveHouseholdCountWithFallback(hscpNo: String): Int {
         if (!householdFallbackEnabled || hscpNo.isBlank()) return 0

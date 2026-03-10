@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component
 import org.springframework.web.client.HttpStatusCodeException
 import org.springframework.web.client.RestTemplate
 import java.net.URI
+import kotlin.math.round
 
 @Component
 class TeamsNotifierService(
@@ -41,7 +42,7 @@ class TeamsNotifierService(
 
         val groupedItems = buildCombinedGroups(notifyItems)
         if (groupedItems.isEmpty()) {
-            log.info("가격대/평형 조건에 맞는 전송 대상이 없어 알림을 스킵합니다.")
+            log.info("조건에 맞는 전송 대상이 없어 알림을 스킵합니다.")
             return
         }
 
@@ -258,8 +259,22 @@ class TeamsNotifierService(
 
     private fun toMarkdownLine(item: Pair<Listing, String>): String {
         val (listing, type) = item
-        val householdInfo = if (listing.hsehCnt > 0) ", ${listing.hsehCnt}세대" else ""
-        return "**[$type]** ${listing.regionName} ${listing.title} **${formatPrice(listing.price)}** (${listing.pyeong}평$householdInfo, ${listing.floor}) - [상세보기](${listing.url})"
+        val supplySqm = listing.areaSupplySqm
+        val exclusiveSqm = if (listing.areaExclusiveSqm > 0) listing.areaExclusiveSqm else listing.areaSqm
+        val detailParts = mutableListOf<String>()
+
+        if (listing.hsehCnt > 0) {
+            detailParts.add("${listing.hsehCnt}세대")
+        }
+        if (supplySqm > 0 || exclusiveSqm > 0) {
+            detailParts.add("공급/전용 ${formatArea(supplySqm)}/${formatArea(exclusiveSqm)}㎡")
+        }
+        if (listing.floor.isNotBlank()) {
+            detailParts.add(listing.floor)
+        }
+
+        val detailText = if (detailParts.isEmpty()) "" else " (${detailParts.joinToString(", ")})"
+        return "**[$type]** ${listing.regionName} ${listing.title} **${formatPrice(listing.price)}**$detailText - [상세보기](${listing.url})"
     }
 
     private fun formatPrice(priceMan: Long): String {
@@ -267,6 +282,17 @@ class TeamsNotifierService(
         val eok = priceMan / 10_000
         val man = priceMan % 10_000
         return if (man == 0L) "${eok}억" else "${eok}억 ${man}만"
+    }
+
+    private fun formatArea(areaSqm: Double): String {
+        if (areaSqm <= 0.0) return "-"
+        val rounded2 = round(areaSqm * 100.0) / 100.0
+        val text = if (rounded2 % 1.0 == 0.0) {
+            rounded2.toInt().toString()
+        } else {
+            rounded2.toString()
+        }
+        return text
     }
 
     private fun isPowerAutomateUrl(url: String): Boolean =

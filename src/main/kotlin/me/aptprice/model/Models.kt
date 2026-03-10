@@ -12,11 +12,14 @@ enum class MarketStatus {
 data class Listing(
     val articleNo: String,
     val hscpNo: String = "",
+    val sameAddrHash: String = "",
     val title: String,
     val regionName: String,
     val price: Long,
     val floor: String,
-    val areaSqm: Double,
+    val areaSqm: Double, // 하위 호환용(기본 전용면적)
+    val areaSupplySqm: Double = 0.0, // 공급면적
+    val areaExclusiveSqm: Double = areaSqm, // 전용면적
     val pyeong: Int,
     val hsehCnt: Int, // 총 세대수
     val url: String,
