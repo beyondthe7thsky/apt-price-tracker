@@ -28,6 +28,8 @@ class BotRunner(
     @Value("\${bot.safe.retry-region-after-abuse:true}") private val retryRegionAfterAbuse: Boolean,
     @Value("\${bot.safe.max-abuse-retry-per-region:1}") private val maxAbuseRetryPerRegion: Int,
     @Value("\${bot.safe.max-abuse-wait-ms:480000}") private val maxAbuseWaitMs: Long,
+    @Value("\${bot.safe.replay-abuse-skipped-regions:true}") private val replayAbuseSkippedRegionsEnabled: Boolean,
+    @Value("\${bot.safe.max-abuse-replay-rounds:2}") private val maxAbuseReplayRounds: Int,
     @Value("\${bot.safe.region-delay-min-ms:5000}") private val regionDelayMinMs: Long,
     @Value("\${bot.safe.region-delay-max-ms:9000}") private val regionDelayMaxMs: Long,
     @Value("\${bot.market.off-market-confirm-miss-count:3}") private val offMarketConfirmMissCount: Int,
@@ -206,57 +208,13 @@ class BotRunner(
         val allNewListings = mutableListOf<Listing>()
         val successfulRegions = mutableSetOf<String>()
         var blockedByAbuse = false
-        var abuseSkippedRegions = 0
+        val abuseSkippedRegionQueue = linkedMapOf<String, Map<String, String>>()
 
-        for ((index, region) in runRegions.withIndex()) {
-            val regionName = region["name"]!!
-
-            var listings: List<Listing>? = null
-            var abuseAttempt = 0
-            while (true) {
-                try {
-                    listings = naverService.fetchListings(regionName, region["code"]!!)
-                    break
-                } catch (e: AbuseBlockedException) {
-                    blockedByAbuse = true
-                    val remainMs = naverService.abuseCooldownRemainingMillis()
-                    val allowRetry = retryRegionAfterAbuse &&
-                        abuseAttempt < maxAbuseRetryPerRegion.coerceAtLeast(0) &&
-                        remainMs > 0
-
-                    if (allowRetry) {
-                        val waitMs = remainMs.coerceAtMost(maxAbuseWaitMs.coerceAtLeast(0L))
-                        log.warn(
-                            "{} 차단 감지: {}ms 대기 후 재시도 ({}/{})",
-                            regionName,
-                            waitMs,
-                            abuseAttempt + 1,
-                            maxAbuseRetryPerRegion + 1
-                        )
-                        if (waitMs > 0) {
-                            Thread.sleep(waitMs)
-                        }
-                        abuseAttempt += 1
-                        continue
-                    }
-
-                    abuseSkippedRegions += 1
-                    log.warn("{} 수집 스킵(차단): {}", regionName, e.message)
-                    break
-                } catch (e: RegionFetchFailedException) {
-                    log.warn("{} 수집 실패(기존 데이터 유지): {}", regionName, e.message)
-                    break
-                }
-            }
-
-            if (listings == null) {
-                continue
-            }
-            successfulRegions.add(regionName)
-
-            // 20~39평형만 필터링
+        fun saveCheckpoint(listings: List<Listing>, regionName: String) {
             val filtered = listings.filter { it.pyeong in 20..39 }
             allNewListings.addAll(filtered)
+            successfulRegions.add(regionName)
+
             val checkpointNow = LocalDateTime.now().toString()
             val checkpoint = buildMergeResult(oldData, allNewListings, successfulRegions, checkpointNow)
             repository.saveAll(checkpoint.mergedListings)
@@ -267,12 +225,62 @@ class BotRunner(
                 checkpoint.newVisibleCount,
                 checkpoint.mergedListings.size
             )
+        }
 
-            if (index < runRegions.lastIndex) {
-                val delayRange = normalizedDelayRange(regionDelayMinMs, regionDelayMaxMs, 3_000L, 7_000L)
-                val delayMillis = random.nextLong(delayRange.first, delayRange.second + 1)
-                log.info("다음 지역 수집 전 {}ms 대기", delayMillis)
+        fun waitBeforeNextRegion(shouldWait: Boolean) {
+            if (!shouldWait) return
+            val delayMillis = nextRegionDelayMillis()
+            log.info("다음 지역 수집 전 {}ms 대기", delayMillis)
+            if (delayMillis > 0) {
                 Thread.sleep(delayMillis)
+            }
+        }
+
+        for ((index, region) in runRegions.withIndex()) {
+            val regionName = region["name"]!!
+            val regionCode = region["code"]!!
+            when (val outcome = fetchRegionWithCooldownRetry(regionName, regionCode)) {
+                is RegionFetchOutcome.Success -> saveCheckpoint(outcome.listings, regionName)
+                is RegionFetchOutcome.AbuseSkipped -> {
+                    blockedByAbuse = true
+                    abuseSkippedRegionQueue[regionName] = region
+                    log.warn("{} 수집 스킵(차단): {}", regionName, outcome.reason)
+                }
+                is RegionFetchOutcome.Failed -> {
+                    log.warn("{} 수집 실패(기존 데이터 유지): {}", regionName, outcome.reason)
+                }
+            }
+            waitBeforeNextRegion(index < runRegions.lastIndex)
+        }
+
+        if (replayAbuseSkippedRegionsEnabled && abuseSkippedRegionQueue.isNotEmpty()) {
+            val replayRounds = maxAbuseReplayRounds.coerceAtLeast(0)
+            for (round in 1..replayRounds) {
+                if (abuseSkippedRegionQueue.isEmpty()) break
+
+                val replayTargets = abuseSkippedRegionQueue.values.toList()
+                abuseSkippedRegionQueue.clear()
+                log.warn("abuse 차단 스킵 지역 재수집 {}차 시작: {}개", round, replayTargets.size)
+
+                for ((index, region) in replayTargets.withIndex()) {
+                    val regionName = region["name"]!!
+                    val regionCode = region["code"]!!
+                    when (val outcome = fetchRegionWithCooldownRetry(regionName, regionCode)) {
+                        is RegionFetchOutcome.Success -> {
+                            saveCheckpoint(outcome.listings, regionName)
+                            log.info("{} 재수집 성공({}/{})", regionName, round, replayRounds)
+                        }
+                        is RegionFetchOutcome.AbuseSkipped -> {
+                            blockedByAbuse = true
+                            abuseSkippedRegionQueue[regionName] = region
+                            log.warn("{} 재수집 스킵(차단, {}/{}): {}", regionName, round, replayRounds, outcome.reason)
+                        }
+                        is RegionFetchOutcome.Failed -> {
+                            log.warn("{} 재수집 실패(기존 데이터 유지): {}", regionName, outcome.reason)
+                        }
+                    }
+                    waitBeforeNextRegion(index < replayTargets.lastIndex)
+                }
             }
         }
 
@@ -314,9 +322,49 @@ class BotRunner(
             mergeResult.offMarketChanged,
             mergeResult.relistedChanged
         )
+        val abuseSkippedRegions = abuseSkippedRegionQueue.size
         if (abuseSkippedRegions > 0) {
             log.warn("이번 실행에서 abuse 차단으로 스킵된 지역: {}개", abuseSkippedRegions)
         }
+    }
+
+    private fun fetchRegionWithCooldownRetry(regionName: String, regionCode: String): RegionFetchOutcome {
+        var abuseAttempt = 0
+        while (true) {
+            try {
+                return RegionFetchOutcome.Success(naverService.fetchListings(regionName, regionCode))
+            } catch (e: AbuseBlockedException) {
+                val remainMs = naverService.abuseCooldownRemainingMillis()
+                val allowRetry = retryRegionAfterAbuse &&
+                    abuseAttempt < maxAbuseRetryPerRegion.coerceAtLeast(0) &&
+                    remainMs > 0
+
+                if (allowRetry) {
+                    val waitMs = remainMs.coerceAtMost(maxAbuseWaitMs.coerceAtLeast(0L))
+                    log.warn(
+                        "{} 차단 감지: {}ms 대기 후 재시도 ({}/{})",
+                        regionName,
+                        waitMs,
+                        abuseAttempt + 1,
+                        maxAbuseRetryPerRegion + 1
+                    )
+                    if (waitMs > 0) {
+                        Thread.sleep(waitMs)
+                    }
+                    abuseAttempt += 1
+                    continue
+                }
+
+                return RegionFetchOutcome.AbuseSkipped(e.message ?: "abuse 차단")
+            } catch (e: RegionFetchFailedException) {
+                return RegionFetchOutcome.Failed(e.message ?: "지역 수집 실패")
+            }
+        }
+    }
+
+    private fun nextRegionDelayMillis(): Long {
+        val delayRange = normalizedDelayRange(regionDelayMinMs, regionDelayMaxMs, 3_000L, 7_000L)
+        return random.nextLong(delayRange.first, delayRange.second + 1)
     }
 
     private fun buildMergeResult(
@@ -464,4 +512,10 @@ class BotRunner(
         val offMarketChanged: Int,
         val relistedChanged: Int
     )
+
+    private sealed class RegionFetchOutcome {
+        data class Success(val listings: List<Listing>) : RegionFetchOutcome()
+        data class AbuseSkipped(val reason: String) : RegionFetchOutcome()
+        data class Failed(val reason: String) : RegionFetchOutcome()
+    }
 }

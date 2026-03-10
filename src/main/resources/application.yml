@@ -11,6 +11,8 @@ bot:
     retry-region-after-abuse: true
     max-abuse-retry-per-region: 1
     max-abuse-wait-ms: 300000
+    replay-abuse-skipped-regions: true
+    max-abuse-replay-rounds: 2
     region-delay-min-ms: 3000
     region-delay-max-ms: 6000
 
