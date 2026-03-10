@@ -29,12 +29,3 @@ naver:
     page-delay-max-ms: 1800
     request-timeout-ms: 20000
     abuse-cooldown-minutes: 8
-    household-fallback-enabled: true
-    household-fallback-timeout-ms: 7000
-    household-fallback-delay-min-ms: 250
-    household-fallback-delay-max-ms: 700
-    household-fallback-normal-sample-rate: 0.35
-    household-fallback-degraded-sample-rate: 0.05
-    household-fallback-429-window-ms: 180000
-    household-fallback-429-threshold: 3
-    household-fallback-degraded-duration-ms: 1200000

@@ -13,7 +13,7 @@ import java.net.http.HttpResponse
 import java.net.http.HttpTimeoutException
 import java.time.Duration
 import java.time.LocalDate
-import java.util.concurrent.ConcurrentHashMap
+import java.util.Locale
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
@@ -67,47 +67,8 @@ class NaverService(private val objectMapper: ObjectMapper) {
     @Value("\${naver.safe.abuse-cooldown-minutes:30}")
     private var abuseCooldownMinutes: Long = 30L
 
-    @Value("\${naver.safe.household-fallback-enabled:true}")
-    private var householdFallbackEnabled: Boolean = true
-
-    @Value("\${naver.safe.household-fallback-timeout-ms:7000}")
-    private var householdFallbackTimeoutMs: Long = 7_000L
-
-    @Value("\${naver.safe.household-fallback-delay-min-ms:250}")
-    private var householdFallbackDelayMinMs: Long = 250L
-
-    @Value("\${naver.safe.household-fallback-delay-max-ms:700}")
-    private var householdFallbackDelayMaxMs: Long = 700L
-
-    @Value("\${naver.safe.household-fallback-normal-sample-rate:1.0}")
-    private var householdFallbackNormalSampleRate: Double = 1.0
-
-    @Value("\${naver.safe.household-fallback-degraded-sample-rate:0.2}")
-    private var householdFallbackDegradedSampleRate: Double = 0.2
-
-    @Value("\${naver.safe.household-fallback-429-window-ms:300000}")
-    private var householdFallback429WindowMs: Long = 300_000L
-
-    @Value("\${naver.safe.household-fallback-429-threshold:5}")
-    private var householdFallback429Threshold: Int = 5
-
-    @Value("\${naver.safe.household-fallback-degraded-duration-ms:600000}")
-    private var householdFallbackDegradedDurationMs: Long = 600_000L
-
     @Volatile
     private var blockedUntilEpochMillis: Long = 0
-
-    private val householdFallbackLock = Any()
-    private val householdFallback429Lock = Any()
-    private val householdFallbackCache = ConcurrentHashMap<String, Int>()
-    private val householdFallbackMisses = ConcurrentHashMap.newKeySet<String>()
-    private val householdFallback429Timestamps = ArrayDeque<Long>()
-
-    @Volatile
-    private var lastHouseholdFallbackAtMillis: Long = 0L
-
-    @Volatile
-    private var householdFallbackDegradedUntilMillis: Long = 0L
 
     fun abuseCooldownRemainingMillis(nowMillis: Long = System.currentTimeMillis()): Long =
         (blockedUntilEpochMillis - nowMillis).coerceAtLeast(0L)
@@ -284,11 +245,11 @@ class NaverService(private val objectMapper: ObjectMapper) {
             parseHouseholdCount(node.get("totHsehCnt")),
             parseHouseholdCount(node.get("totHhldCnt")),
             parseHouseholdCount(node.get("hhldCnt")),
-            complex.hsehCnt,
-            resolveHouseholdCountWithFallback(complex.hscpNo)
+            complex.hsehCnt
         )
 
         val title = node.get("atclNm")?.asText()?.trim().orEmpty().ifBlank { complex.hscpNm }
+        val buildingName = node.get("bildNm")?.asText()?.trim().orEmpty()
         val floor = node.get("flrInfo")?.asText()?.trim().orEmpty()
         val sameAddrHash = node.get("sameAddrHash")?.asText("")?.trim().orEmpty()
 
@@ -296,6 +257,7 @@ class NaverService(private val objectMapper: ObjectMapper) {
             articleNo = articleNo,
             hscpNo = complex.hscpNo,
             sameAddrHash = sameAddrHash,
+            buildingName = buildingName,
             title = title,
             regionName = regionName,
             price = parsedPrice,
@@ -443,213 +405,44 @@ class NaverService(private val objectMapper: ObjectMapper) {
         if (listing.sameAddrHash.isNotBlank()) {
             return "HASH:${listing.hscpNo}:${listing.sameAddrHash}"
         }
+        val buildingKey = normalizeBuildingKey(listing.buildingName)
+        val floorKey = normalizeFloorKey(listing.floor)
+        val areaKey = normalizedAreaKey(firstPositiveArea(listing.areaExclusiveSqm, listing.areaSupplySqm, listing.areaSqm))
+        val titleKey = normalizeTitleKey(listing.title)
+        if (buildingKey.isNotBlank() && floorKey.isNotBlank() && areaKey > 0.0 && titleKey.isNotBlank()) {
+            return "UNIT:${listing.hscpNo}:$titleKey:$buildingKey:$floorKey:${"%.2f".format(Locale.US, areaKey)}"
+        }
         return "ATCL:${listing.articleNo}"
     }
 
-    private fun resolveHouseholdCountWithFallback(hscpNo: String): Int {
-        if (!householdFallbackEnabled || hscpNo.isBlank()) return 0
-        householdFallbackCache[hscpNo]?.let { return it }
-        if (householdFallbackMisses.contains(hscpNo)) return 0
-
-        synchronized(householdFallbackLock) {
-            householdFallbackCache[hscpNo]?.let { return it }
-            if (householdFallbackMisses.contains(hscpNo)) return 0
-
-            val now = System.currentTimeMillis()
-            val sinceLast = now - lastHouseholdFallbackAtMillis
-            val minDelay = householdFallbackDelayMinMs.coerceAtLeast(0L)
-            if (sinceLast in 0 until minDelay) {
-                Thread.sleep(minDelay - sinceLast)
-            }
-
-            if (!shouldAttemptHouseholdFallbackNow()) {
-                householdFallbackMisses.add(hscpNo)
-                log.info("세대수 보강 스킵(429 완화 샘플링). hscpNo={}", hscpNo)
-                return 0
-            }
-
-            val resolved = fetchHouseholdCountFromAltApis(hscpNo)
-            lastHouseholdFallbackAtMillis = System.currentTimeMillis()
-
-            if (resolved > 0) {
-                householdFallbackCache[hscpNo] = resolved
-                log.info("세대수 보강 성공. hscpNo={} hsehCnt={}", hscpNo, resolved)
-                return resolved
-            }
-
-            householdFallbackMisses.add(hscpNo)
-            return 0
-        }
+    private fun normalizeFloorKey(raw: String): String {
+        if (raw.isBlank()) return ""
+        return raw
+            .replace(" ", "")
+            .replace("저", "L")
+            .replace("중", "M")
+            .replace("고", "H")
+            .uppercase()
     }
 
-    private fun fetchHouseholdCountFromAltApis(hscpNo: String): Int {
-        val candidates = listOf(
-            AltApiCandidate(
-                url = "https://new.land.naver.com/api/complexes/$hscpNo",
-                referer = "https://new.land.naver.com/complexes/$hscpNo"
-            ),
-            AltApiCandidate(
-                url = "https://new.land.naver.com/api/complexes/overview/$hscpNo",
-                referer = "https://new.land.naver.com/complexes/$hscpNo"
-            ),
-            AltApiCandidate(
-                url = "https://fin.land.naver.com/front-api/v1/complexes/$hscpNo",
-                referer = "https://fin.land.naver.com/complexes/$hscpNo"
-            )
-        )
-
-        for ((index, candidate) in candidates.withIndex()) {
-            val body = requestBodyOnce(
-                url = candidate.url,
-                referer = candidate.referer,
-                userAgent = DESKTOP_USER_AGENT,
-                timeoutMs = householdFallbackTimeoutMs
-            )
-
-            if (body.isNullOrBlank()) {
-                if (index < candidates.lastIndex) {
-                    Thread.sleep(randomDelayMs(householdFallbackDelayMinMs, householdFallbackDelayMaxMs, 250L, 700L))
-                }
-                continue
-            }
-
-            val root = runCatching { objectMapper.readTree(body) }.getOrNull() ?: continue
-            val hsehCnt = extractHouseholdCountFromTree(root)
-            if (hsehCnt > 0) {
-                return hsehCnt
-            }
-
-            if (index < candidates.lastIndex) {
-                Thread.sleep(randomDelayMs(householdFallbackDelayMinMs, householdFallbackDelayMaxMs, 250L, 700L))
-            }
-        }
-        return 0
+    private fun normalizeTitleKey(raw: String): String {
+        if (raw.isBlank()) return ""
+        return raw
+            .lowercase()
+            .replace(Regex("\\s+"), "")
+            .replace(Regex("[^0-9a-z가-힣동]"), "")
     }
 
-    private fun requestBodyOnce(
-        url: String,
-        referer: String,
-        userAgent: String,
-        timeoutMs: Long,
-    ): String? {
-        return try {
-            val request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .timeout(Duration.ofMillis(timeoutMs.coerceAtLeast(3_000L)))
-                .header("Accept", "application/json, text/plain, */*")
-                .header("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7")
-                .header("Referer", referer)
-                .header("User-Agent", userAgent)
-                .GET()
-                .build()
-
-            val response = httpClient.send(request, HttpResponse.BodyHandlers.ofString())
-            val status = response.statusCode()
-            if (status == 200) {
-                return response.body().orEmpty()
-            }
-            if (status == 429) {
-                recordHouseholdFallback429()
-            }
-            if (status in setOf(401, 403, 404, 429)) {
-                log.info("세대수 보강 API 응답 상태({}). url={}", status, url)
-            } else {
-                log.debug("세대수 보강 API 응답 상태({}). url={}", status, url)
-            }
-            null
-        } catch (e: Exception) {
-            log.debug("세대수 보강 API 호출 실패. url={} message={}", url, e.message)
-            null
-        }
+    private fun normalizeBuildingKey(raw: String): String {
+        if (raw.isBlank()) return ""
+        return raw
+            .replace(" ", "")
+            .replace(Regex("[^0-9a-zA-Z가-힣동]"), "")
+            .uppercase()
     }
 
-    private fun shouldAttemptHouseholdFallbackNow(): Boolean {
-        val now = System.currentTimeMillis()
-        val inDegradedMode = now < householdFallbackDegradedUntilMillis
-        val sampleRate = if (inDegradedMode) {
-            householdFallbackDegradedSampleRate
-        } else {
-            householdFallbackNormalSampleRate
-        }.coerceIn(0.0, 1.0)
-
-        if (sampleRate >= 1.0) return true
-        if (sampleRate <= 0.0) return false
-        return random.nextDouble() < sampleRate
-    }
-
-    private fun recordHouseholdFallback429() {
-        val now = System.currentTimeMillis()
-        val windowMs = householdFallback429WindowMs.coerceAtLeast(60_000L)
-        val threshold = householdFallback429Threshold.coerceAtLeast(1)
-        val degradedDurationMs = householdFallbackDegradedDurationMs.coerceAtLeast(60_000L)
-
-        synchronized(householdFallback429Lock) {
-            while (householdFallback429Timestamps.isNotEmpty() && now - householdFallback429Timestamps.first() > windowMs) {
-                householdFallback429Timestamps.removeFirst()
-            }
-            householdFallback429Timestamps.addLast(now)
-
-            if (householdFallback429Timestamps.size >= threshold) {
-                val previousUntil = householdFallbackDegradedUntilMillis
-                val nextUntil = now + degradedDurationMs
-                if (nextUntil > previousUntil) {
-                    householdFallbackDegradedUntilMillis = nextUntil
-                    if (now >= previousUntil) {
-                        log.warn(
-                            "세대수 보강 API 429 급증 감지 - {}분간 샘플링 축소({} -> {}).",
-                            degradedDurationMs / 60_000L,
-                            householdFallbackNormalSampleRate,
-                            householdFallbackDegradedSampleRate
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    private fun extractHouseholdCountFromTree(root: JsonNode): Int {
-        val direct = firstPositive(
-            parseHouseholdCount(root.get("hsehCnt")),
-            parseHouseholdCount(root.get("totHsehCnt")),
-            parseHouseholdCount(root.get("totHhldCnt")),
-            parseHouseholdCount(root.get("hhldCnt")),
-            parseHouseholdCount(root.get("householdCount")),
-            parseHouseholdCount(root.get("totalHouseholdCount")),
-            parseHouseholdCount(root.get("allHouseholdCount"))
-        )
-        if (direct > 0) return direct
-
-        fun scan(node: JsonNode, depth: Int): Int {
-            if (depth > 5) return 0
-            if (node.isObject) {
-                for ((rawKey, value) in node.properties()) {
-                    val key = rawKey.lowercase()
-                    if (isHouseholdLikeField(key)) {
-                        val parsed = parseHouseholdCount(value)
-                        if (parsed > 0) return parsed
-                    }
-                    val nested = scan(value, depth + 1)
-                    if (nested > 0) return nested
-                }
-            } else if (node.isArray) {
-                node.forEach { child ->
-                    val nested = scan(child, depth + 1)
-                    if (nested > 0) return nested
-                }
-            }
-            return 0
-        }
-
-        return scan(root, 0)
-    }
-
-    private fun isHouseholdLikeField(key: String): Boolean {
-        if (key in HOUSEHOLD_FIELD_NAMES) return true
-        if (key.contains("household") && (key.contains("cnt") || key.contains("count"))) return true
-        if (key.contains("hhld") && (key.contains("cnt") || key.contains("count"))) return true
-        if (key.contains("hseh") && (key.contains("cnt") || key.contains("count"))) return true
-        return false
-    }
+    private fun normalizedAreaKey(area: Double): Double =
+        if (area > 0.0) kotlin.math.round(area * 100.0) / 100.0 else 0.0
 
     private fun String.oneLineSnippet(maxLength: Int = 180): String {
         return replace("\n", " ").replace("\r", " ").trim().take(maxLength)
@@ -672,26 +465,9 @@ class NaverService(private val objectMapper: ObjectMapper) {
         val timedOut: Boolean = false,
     )
 
-    private data class AltApiCandidate(
-        val url: String,
-        val referer: String,
-    )
-
     companion object {
         private val RETRYABLE_STATUS_CODES = setOf(401, 403, 429, 500, 502, 503, 504)
         private const val MOBILE_USER_AGENT =
             "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-        private const val DESKTOP_USER_AGENT =
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-        private val HOUSEHOLD_FIELD_NAMES = setOf(
-            "hsehcnt",
-            "tothsehcnt",
-            "tothhldcnt",
-            "hhldcnt",
-            "householdcount",
-            "totalhouseholdcount",
-            "allhouseholdcount",
-            "householdtotalcount"
-        )
     }
 }
