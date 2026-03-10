@@ -253,6 +253,7 @@ class NaverService(private val objectMapper: ObjectMapper) {
         )
 
         val title = node.get("atclNm")?.asText()?.trim().orEmpty().ifBlank { complex.hscpNm }
+        val featureDesc = node.get("atclFetrDesc")?.asText()?.trim().orEmpty()
         val buildingName = node.get("bildNm")?.asText()?.trim().orEmpty()
         val floor = node.get("flrInfo")?.asText()?.trim().orEmpty()
         val sameAddrHash = node.get("sameAddrHash")?.asText("")?.trim().orEmpty()
@@ -263,6 +264,7 @@ class NaverService(private val objectMapper: ObjectMapper) {
             sameAddrHash = sameAddrHash,
             buildingName = buildingName,
             title = title,
+            featureDesc = featureDesc,
             regionName = regionName,
             price = parsedPrice,
             floor = floor,

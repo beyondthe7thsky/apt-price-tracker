@@ -15,6 +15,7 @@ data class Listing(
     val sameAddrHash: String = "",
     val buildingName: String = "",
     val title: String,
+    val featureDesc: String = "",
     val regionName: String,
     val price: Long,
     val floor: String,

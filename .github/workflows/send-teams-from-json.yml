@@ -198,6 +198,7 @@ jobs:
                       "city": city,
                       "region": region,
                       "title": str(it.get("title", "")),
+                      "featureDesc": str(it.get("featureDesc", "")),
                       "hsehCnt": as_int(it.get("hsehCnt", 0), 0),
                       "price": price,
                       "priceText": format_price(price),
@@ -258,7 +259,7 @@ jobs:
               .chip.s-cheap{background:#ecfeff;color:#155e75;border-color:#a5f3fc}
               .chip.s-normal{background:#f8fafc;color:#475569;border-color:#cbd5e1}
               .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-              table{width:100%;min-width:1120px;border-collapse:collapse;font-size:13px}
+              table{width:100%;min-width:1280px;border-collapse:collapse;font-size:13px}
               th,td{border-bottom:1px solid #edf1f7;padding:8px 10px;text-align:left;vertical-align:top}
               th{background:#f8fafc;color:#475569}
               th.sortable{cursor:pointer;user-select:none}
@@ -266,6 +267,7 @@ jobs:
               th.sortable.active .sort-indicator{color:#0f172a}
               td.price{font-weight:800;white-space:nowrap}
               td.dim{color:var(--muted);white-space:nowrap}
+              td.feature{max-width:340px;color:#334155;white-space:normal;word-break:keep-all;line-height:1.35}
               .badge{display:inline-block;padding:3px 7px;border-radius:999px;font-size:11px;font-weight:800;border:1px solid}
               .b-bargain{background:#ffe4e6;color:#9f1239;border-color:#fecdd3}
               .b-cheap{background:#ecfeff;color:#155e75;border-color:#a5f3fc}
@@ -339,10 +341,11 @@ jobs:
               const sTotal=document.getElementById('sTotal'),sRegions=document.getElementById('sRegions'),sBargain=document.getElementById('sBargain'),sCheap=document.getElementById('sCheap');
               const CITY_COLOR={"수원":"#2563eb","용인수지":"#0f766e","서울양천":"#9333ea","서울강서":"#0284c7","서울영등포":"#0891b2","서울동작":"#dc2626","서울관악":"#ea580c","서울구로":"#16a34a","서울금천":"#ca8a04","서울성동":"#4f46e5","서울마포":"#7c3aed","서울용산":"#be123c","서울은평":"#0d9488","서울강동":"#1d4ed8","서울동대문":"#c2410c","서울광진":"#7e22ce","서울서대문":"#0f766e","서울성북":"#475569","성남판교":"#0f766e","성남분당":"#2563eb","성남수정":"#be123c","성남중원":"#0891b2","안양":"#ea580c"};
               const SORT_DEFAULT={key:'price',dir:'asc'};
-              const FIRST_DIR={city:'asc',title:'asc',price:'asc',avgPrice:'desc',diffPct:'asc',signal:'asc',statusLabel:'asc',hsehCnt:'desc',areaSupplyPyeong:'desc'};
+              const FIRST_DIR={city:'asc',title:'asc',featureDesc:'asc',price:'asc',avgPrice:'desc',diffPct:'asc',signal:'asc',statusLabel:'asc',hsehCnt:'desc',areaSupplyPyeong:'desc'};
               const sortState={...SORT_DEFAULT};
               const esc=(s)=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
               const uniq=(a)=>Array.from(new Set(a)).sort((x,y)=>String(x).localeCompare(String(y),'ko'));
+              const shortFeature=(s)=>{const t=String(s??'').trim(); return t ? (t.length>56 ? `${t.slice(0,56)}…` : t) : '-';};
               const mapUrl=(row)=>`https://map.naver.com/p/search/${encodeURIComponent(`${row.region} ${row.title}`)}`;
               const signalClass=(v)=>v==='급매'?'b-bargain':(v==='저렴'?'b-cheap':'b-normal');
               const statusClass=(v)=>v==='다시 등록된 매물(판매중)'?'status-relisted':'status-active';
@@ -364,9 +367,9 @@ jobs:
                 const n=Number(h||0);
                 return n>0 ? `${n}세대` : '정책상 비공개(상세보기)';
               }
-              function filtered(){const city=cityEl.value,region=regionEl.value,priceBand=priceEl.value,pyeongBand=pyeongEl.value,householdBand=householdEl.value,signal=signalEl.value,status=statusEl.value,q=qEl.value.trim().toLowerCase();return RAW.filter(x=>{if(city&&x.city!==city)return false;if(region&&x.region!==region)return false;if(priceBand&&x.priceBand!==priceBand)return false;if(pyeongBand&&x.pyeongBand!==pyeongBand)return false;if(!householdMatch(x.hsehCnt,householdBand))return false;if(signal&&x.signal!==signal)return false;if(status&&x.statusLabel!==status)return false;if(q&&!`${x.region} ${x.title}`.toLowerCase().includes(q))return false;return true;});}
+              function filtered(){const city=cityEl.value,region=regionEl.value,priceBand=priceEl.value,pyeongBand=pyeongEl.value,householdBand=householdEl.value,signal=signalEl.value,status=statusEl.value,q=qEl.value.trim().toLowerCase();return RAW.filter(x=>{if(city&&x.city!==city)return false;if(region&&x.region!==region)return false;if(priceBand&&x.priceBand!==priceBand)return false;if(pyeongBand&&x.pyeongBand!==pyeongBand)return false;if(!householdMatch(x.hsehCnt,householdBand))return false;if(signal&&x.signal!==signal)return false;if(status&&x.statusLabel!==status)return false;if(q&&!`${x.region} ${x.title} ${x.featureDesc || ''}`.toLowerCase().includes(q))return false;return true;});}
               function compareRows(a,b,key){
-                if(['city','title','signal','statusLabel','region'].includes(key)){
+                if(['city','title','featureDesc','signal','statusLabel','region'].includes(key)){
                   return String(a[key]??'').localeCompare(String(b[key]??''),'ko');
                 }
                 const an=Number(a[key]??0), bn=Number(b[key]??0);
@@ -408,14 +411,14 @@ jobs:
                   const countNormal=items.filter(x=>x.signal==='보통').length;
                   const chips=`<span class="chip city">${esc(city)}</span><span class="chip s-bargain">급매 ${countBargain}</span><span class="chip s-cheap">저렴 ${countCheap}</span><span class="chip s-normal">보통 ${countNormal}</span>`;
 
-                  const rowsHtml=items.map(it=>`<tr><td data-label="도시">${esc(it.city)}</td><td data-label="단지/매물">${esc(it.title)}</td><td data-label="매물가" class="price">${esc(it.priceText)}</td><td data-label="단지 평균가">${esc(it.avgPriceText)}</td><td data-label="평균대비" class="${diffClass(it.diffPct)}">${esc(diffText(it.diffPct))}</td><td data-label="판단"><span class="badge ${signalClass(it.signal)}">${esc(it.signal)}</span></td><td data-label="상태"><span class="badge ${statusClass(it.statusLabel)}">${esc(it.statusLabel)}</span></td><td data-label="세대수" class="dim">${esc(householdText(it.hsehCnt))}</td><td data-label="공급/전용(평)" class="dim">${esc(it.areaSupplyPyeongText)}/${esc(it.areaExclusivePyeongText)}평</td><td data-label="층" class="dim">${esc(it.floor)}</td><td data-label="매물"><a href="${esc(it.url)}" target="_blank">상세보기</a></td><td data-label="지도"><a href="${esc(mapUrl(it))}" target="_blank">지도</a></td></tr>`).join('');
+                  const rowsHtml=items.map(it=>`<tr><td data-label="도시">${esc(it.city)}</td><td data-label="단지/매물">${esc(it.title)}</td><td data-label="특징" class="feature">${esc(shortFeature(it.featureDesc))}</td><td data-label="매물가" class="price">${esc(it.priceText)}</td><td data-label="단지 평균가">${esc(it.avgPriceText)}</td><td data-label="평균대비" class="${diffClass(it.diffPct)}">${esc(diffText(it.diffPct))}</td><td data-label="판단"><span class="badge ${signalClass(it.signal)}">${esc(it.signal)}</span></td><td data-label="상태"><span class="badge ${statusClass(it.statusLabel)}">${esc(it.statusLabel)}</span></td><td data-label="세대수" class="dim">${esc(householdText(it.hsehCnt))}</td><td data-label="공급/전용(평)" class="dim">${esc(it.areaSupplyPyeongText)}/${esc(it.areaExclusivePyeongText)}평</td><td data-label="층" class="dim">${esc(it.floor)}</td><td data-label="매물"><a href="${esc(it.url)}" target="_blank">상세보기</a></td><td data-label="지도"><a href="${esc(mapUrl(it))}" target="_blank">지도</a></td></tr>`).join('');
 
                   const headerCell=(label,key='')=>{
                     if(!key) return `<th>${label}</th>`;
                     const active=sortState.key===key ? 'active' : '';
                     return `<th class="sortable ${active}" data-sort="${key}">${label}<span class="sort-indicator">${sortIndicator(key)}</span></th>`;
                   };
-                  const headerHtml=`<tr>${headerCell('도시','city')}${headerCell('단지/매물','title')}${headerCell('매물가','price')}${headerCell('단지 평균가','avgPrice')}${headerCell('평균대비','diffPct')}${headerCell('판단','signal')}${headerCell('상태','statusLabel')}${headerCell('세대수','hsehCnt')}${headerCell('공급/전용(평)','areaSupplyPyeong')}${headerCell('층')}${headerCell('매물')}${headerCell('지도')}</tr>`;
+                  const headerHtml=`<tr>${headerCell('도시','city')}${headerCell('단지/매물','title')}${headerCell('특징','featureDesc')}${headerCell('매물가','price')}${headerCell('단지 평균가','avgPrice')}${headerCell('평균대비','diffPct')}${headerCell('판단','signal')}${headerCell('상태','statusLabel')}${headerCell('세대수','hsehCnt')}${headerCell('공급/전용(평)','areaSupplyPyeong')}${headerCell('층')}${headerCell('매물')}${headerCell('지도')}</tr>`;
 
                   return `<section class="region" style="--accent:${accent};"><div class="head"><div class="title">${esc(name)} <span style="color:#64748b;font-size:13px;">(${items.length}건)</span></div><div class="chips">${chips}</div></div><div class="table-wrap"><table><thead>${headerHtml}</thead><tbody>${rowsHtml}</tbody></table></div></section>`;
                 }).join('');
