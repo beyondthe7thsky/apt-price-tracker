@@ -11,8 +11,8 @@ bot:
     retry-region-after-abuse: true
     max-abuse-retry-per-region: 1
     max-abuse-wait-ms: 480000
-    region-delay-min-ms: 7000
-    region-delay-max-ms: 12000
+    region-delay-min-ms: 4000
+    region-delay-max-ms: 7000
 
 naver:
   safe:
@@ -22,11 +22,14 @@ naver:
     article-order: prc,date
     max-complex-pages: 1
     max-complex-pages-on-overflow: 3
+    max-overflow-complexes-per-region: 0
     max-complexes-per-region: 0
     rotate-complexes-by-day: true
-    complex-delay-min-ms: 1800
-    complex-delay-max-ms: 3600
-    page-delay-min-ms: 800
-    page-delay-max-ms: 1800
+    complex-delay-min-ms: 1200
+    complex-delay-max-ms: 2200
+    overflow-complex-delay-min-ms: 1200
+    overflow-complex-delay-max-ms: 2400
+    page-delay-min-ms: 500
+    page-delay-max-ms: 1100
     request-timeout-ms: 20000
     abuse-cooldown-minutes: 8

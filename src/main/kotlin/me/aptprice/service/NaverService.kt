@@ -43,6 +43,9 @@ class NaverService(private val objectMapper: ObjectMapper) {
     @Value("\${naver.safe.max-complex-pages-on-overflow:3}")
     private var maxComplexPagesOnOverflow: Int = 3
 
+    @Value("\${naver.safe.max-overflow-complexes-per-region:8}")
+    private var maxOverflowComplexesPerRegion: Int = 8
+
     @Value("\${naver.safe.article-order:prc,date}")
     private var articleOrder: String = "prc,date"
 
@@ -57,6 +60,12 @@ class NaverService(private val objectMapper: ObjectMapper) {
 
     @Value("\${naver.safe.complex-delay-max-ms:2600}")
     private var complexDelayMaxMs: Long = 2_600L
+
+    @Value("\${naver.safe.overflow-complex-delay-min-ms:2600}")
+    private var overflowComplexDelayMinMs: Long = 2_600L
+
+    @Value("\${naver.safe.overflow-complex-delay-max-ms:5200}")
+    private var overflowComplexDelayMaxMs: Long = 5_200L
 
     @Value("\${naver.safe.page-delay-min-ms:600}")
     private var pageDelayMinMs: Long = 600L
@@ -93,9 +102,25 @@ class NaverService(private val objectMapper: ObjectMapper) {
 
         val runComplexes = selectRunComplexes(regionName, complexes)
         val listings = mutableListOf<Listing>()
+        var overflowExpandedComplexes = 0
+        var overflowCapLogged = false
         for ((index, complex) in runComplexes.withIndex()) {
-            val articleResult = fetchComplexArticles(regionName, complex)
+            val allowOverflowExpansion = maxOverflowComplexesPerRegion <= 0 ||
+                overflowExpandedComplexes < maxOverflowComplexesPerRegion
+            if (!allowOverflowExpansion && !overflowCapLogged) {
+                overflowCapLogged = true
+                log.info(
+                    "{} 지역은 과도한 요청 방지를 위해 페이지 확장 단지 상한({})을 적용합니다.",
+                    regionName,
+                    maxOverflowComplexesPerRegion
+                )
+            }
+
+            val articleResult = fetchComplexArticles(regionName, complex, allowOverflowExpansion)
             listings.addAll(articleResult.listings)
+            if (articleResult.overflowExpanded) {
+                overflowExpandedComplexes += 1
+            }
 
             if (articleResult.blockedByAbuse) {
                 log.warn("{} 지역 수집 중 abuse 차단이 감지되어 이번 지역 결과를 폐기하고 수집을 중단합니다.", regionName)
@@ -103,7 +128,12 @@ class NaverService(private val objectMapper: ObjectMapper) {
             }
 
             if (index < runComplexes.lastIndex) {
-                Thread.sleep(randomDelayMs(complexDelayMinMs, complexDelayMaxMs, 4_000L, 9_000L))
+                val delayMillis = if (articleResult.overflowExpanded) {
+                    randomDelayMs(overflowComplexDelayMinMs, overflowComplexDelayMaxMs, 2_600L, 5_200L)
+                } else {
+                    randomDelayMs(complexDelayMinMs, complexDelayMaxMs, 4_000L, 9_000L)
+                }
+                Thread.sleep(delayMillis)
             }
         }
 
@@ -178,7 +208,11 @@ class NaverService(private val objectMapper: ObjectMapper) {
         return rotated.take(limit)
     }
 
-    private fun fetchComplexArticles(regionName: String, complex: ComplexInfo): ArticleFetchResult {
+    private fun fetchComplexArticles(
+        regionName: String,
+        complex: ComplexInfo,
+        allowOverflowExpansion: Boolean,
+    ): ArticleFetchResult {
         val listings = mutableListOf<Listing>()
         val orders = parsedArticleOrders()
         val configuredMaxPages = maxComplexPages.coerceAtLeast(1)
@@ -199,7 +233,7 @@ class NaverService(private val objectMapper: ObjectMapper) {
             mapArticleNode(regionName, complex, node)?.let { listings.add(it) }
         }
 
-        if (configuredMaxPages == 1 && firstPage.moreDataYn == "Y" && firstPage.nodes.size >= 20) {
+        if (allowOverflowExpansion && configuredMaxPages == 1 && firstPage.moreDataYn == "Y" && firstPage.nodes.size >= 20) {
             val overflowMaxPages = maxComplexPagesOnOverflow.coerceAtLeast(1)
             if (overflowMaxPages > effectiveMaxPages) {
                 effectiveMaxPages = overflowMaxPages
@@ -255,7 +289,10 @@ class NaverService(private val objectMapper: ObjectMapper) {
             }
         }
 
-        return ArticleFetchResult(listings = listings)
+        return ArticleFetchResult(
+            listings = listings,
+            overflowExpanded = effectiveMaxPages > configuredMaxPages
+        )
     }
 
     private fun fetchArticlePage(
@@ -555,6 +592,7 @@ class NaverService(private val objectMapper: ObjectMapper) {
     private data class ArticleFetchResult(
         val listings: List<Listing>,
         val blockedByAbuse: Boolean = false,
+        val overflowExpanded: Boolean = false,
     )
 
     private data class ArticlePageResult(

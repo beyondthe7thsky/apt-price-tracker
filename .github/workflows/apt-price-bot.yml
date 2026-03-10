@@ -83,7 +83,7 @@ jobs:
                 run_overflow_pages="3"
                 run_max_complexes="0"
                 ;;
-              "30 2 * * 1-5")
+              "30 4 * * 1-5")
                 run_max="35"
                 run_offset="35"
                 run_overflow_pages="3"
@@ -119,7 +119,7 @@ jobs:
           BOT_SAFE_ROTATE_START_BY_DAY: ${{ env.RUN_ROTATE_BY_DAY }}
           NAVER_SAFE_MAX_COMPLEX_PAGES_ON_OVERFLOW: ${{ env.RUN_MAX_COMPLEX_PAGES_ON_OVERFLOW }}
           NAVER_SAFE_MAX_COMPLEXES_PER_REGION: ${{ env.RUN_MAX_COMPLEXES_PER_REGION }}
-        run: ./gradlew --no-daemon clean bootRun
+        run: ./gradlew --no-daemon bootRun
 
       - name: Commit updated data
         if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.commit_data != 'false')) }}
