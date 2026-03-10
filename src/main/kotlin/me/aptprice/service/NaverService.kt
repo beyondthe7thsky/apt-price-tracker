@@ -46,6 +46,15 @@ class NaverService(private val objectMapper: ObjectMapper) {
     @Value("\${naver.safe.max-overflow-complexes-per-region:8}")
     private var maxOverflowComplexesPerRegion: Int = 8
 
+    @Value("\${naver.safe.overflow-batch-size:2}")
+    private var overflowBatchSize: Int = 2
+
+    @Value("\${naver.safe.overflow-batch-cooldown-min-ms:20000}")
+    private var overflowBatchCooldownMinMs: Long = 20_000L
+
+    @Value("\${naver.safe.overflow-batch-cooldown-max-ms:35000}")
+    private var overflowBatchCooldownMaxMs: Long = 35_000L
+
     @Value("\${naver.safe.article-order:prc,date}")
     private var articleOrder: String = "prc,date"
 
@@ -154,6 +163,26 @@ class NaverService(private val objectMapper: ObjectMapper) {
                     )
                     Thread.sleep(batchDelay)
                 }
+
+                if (articleResult.overflowExpanded &&
+                    overflowBatchSize > 0 &&
+                    overflowExpandedComplexes > 0 &&
+                    overflowExpandedComplexes % overflowBatchSize == 0
+                ) {
+                    val overflowBatchDelay = randomDelayMs(
+                        overflowBatchCooldownMinMs,
+                        overflowBatchCooldownMaxMs,
+                        20_000L,
+                        35_000L
+                    )
+                    log.info(
+                        "{} 지역 overflow 쿨다운 {}ms (확장 단지 {}개 처리)",
+                        regionName,
+                        overflowBatchDelay,
+                        overflowExpandedComplexes
+                    )
+                    Thread.sleep(overflowBatchDelay)
+                }
             }
         }
 
@@ -194,9 +223,9 @@ class NaverService(private val objectMapper: ObjectMapper) {
 
         val result = root.get("result") ?: throw RegionFetchFailedException("${regionName} 단지 목록 result 필드 없음")
         return result.mapNotNull { node ->
-            val hscpNo = node.get("hscpNo")?.asText()?.trim().orEmpty()
-            val hscpNm = node.get("hscpNm")?.asText()?.trim().orEmpty()
-            val hscpTypeCd = node.get("hscpTypeCd")?.asText()?.trim().orEmpty()
+            val hscpNo = node.get("hscpNo").textOrEmpty().trim()
+            val hscpNm = node.get("hscpNm").textOrEmpty().trim()
+            val hscpTypeCd = node.get("hscpTypeCd").textOrEmpty().trim()
             val householdCount = firstPositive(
                 parseHouseholdCount(node.get("hsehCnt")),
                 parseHouseholdCount(node.get("totHsehCnt")),
@@ -344,7 +373,7 @@ class NaverService(private val objectMapper: ObjectMapper) {
 
         return ArticlePageResult(
             nodes = list.toList(),
-            moreDataYn = result.get("moreDataYn")?.asText("").orEmpty(),
+            moreDataYn = result.get("moreDataYn").textOrEmpty(),
             hasData = true
         )
     }
@@ -355,7 +384,7 @@ class NaverService(private val objectMapper: ObjectMapper) {
             .map { it.trim().lowercase() }
             .filter { it.isNotBlank() }
             .distinct()
-        return if (parsed.isEmpty()) listOf("prc") else parsed
+        return parsed.ifEmpty { listOf("prc") }
     }
 
     private fun allocatePageBudgets(totalPages: Int, orderCount: Int): IntArray {
@@ -373,14 +402,14 @@ class NaverService(private val objectMapper: ObjectMapper) {
     }
 
     private fun mapArticleNode(regionName: String, complex: ComplexInfo, node: JsonNode): Listing? {
-        val articleNo = node.get("atclNo")?.asText()?.trim().orEmpty()
+        val articleNo = node.get("atclNo").textOrEmpty().trim()
         if (articleNo.isBlank()) return null
 
         val areaSupplySqm = parseAreaSqm(node.get("spc1"))
         val areaExclusiveSqm = parseAreaSqm(node.get("spc2"))
         val areaSqm = firstPositiveArea(areaExclusiveSqm, areaSupplySqm)
         val pyeongBaseSqm = firstPositiveArea(areaSupplySqm, areaExclusiveSqm)
-        val priceText = node.get("prcInfo")?.asText("").orEmpty()
+        val priceText = node.get("prcInfo").textOrEmpty()
         val parsedPrice = parsePrice(priceText)
         if (parsedPrice <= 0L) return null
         val householdCount = firstPositive(
@@ -391,12 +420,12 @@ class NaverService(private val objectMapper: ObjectMapper) {
             complex.hsehCnt
         )
 
-        val title = node.get("atclNm")?.asText()?.trim().orEmpty().ifBlank { complex.hscpNm }
-        val featureDesc = node.get("atclFetrDesc")?.asText()?.trim().orEmpty()
+        val title = node.get("atclNm").textOrEmpty().trim().ifBlank { complex.hscpNm }
+        val featureDesc = node.get("atclFetrDesc").textOrEmpty().trim()
         val tagList = parseTagList(node.get("tagList"))
-        val buildingName = node.get("bildNm")?.asText()?.trim().orEmpty()
-        val floor = node.get("flrInfo")?.asText()?.trim().orEmpty()
-        val sameAddrHash = node.get("sameAddrHash")?.asText("")?.trim().orEmpty()
+        val buildingName = node.get("bildNm").textOrEmpty().trim()
+        val floor = node.get("flrInfo").textOrEmpty().trim()
+        val sameAddrHash = node.get("sameAddrHash").textOrEmpty().trim()
 
         return Listing(
             articleNo = articleNo,
@@ -523,30 +552,32 @@ class NaverService(private val objectMapper: ObjectMapper) {
         if (node == null || node.isNull) return 0
         val value = when {
             node.isNumber -> node.asInt(0)
-            node.isTextual -> node.asText("").replace(",", "").trim().toIntOrNull() ?: 0
-            else -> 0
+            else -> node.textOrEmpty().replace(",", "").trim().toIntOrNull() ?: 0
         }
         return value.coerceAtLeast(0)
+    }
+
+    private fun JsonNode?.textOrEmpty(): String {
+        if (this == null || this.isNull) return ""
+        return this.asString("")
     }
 
     private fun parseAreaSqm(node: JsonNode?): Double {
         if (node == null || node.isNull) return 0.0
         return when {
             node.isNumber -> node.asDouble(0.0)
-            node.isTextual -> node.asText("")
+            else -> node.textOrEmpty()
                 .replace(",", "")
                 .replace("㎡", "")
                 .trim()
                 .toDoubleOrNull() ?: 0.0
-
-            else -> 0.0
         }.coerceAtLeast(0.0)
     }
 
     private fun parseTagList(node: JsonNode?): List<String> {
         if (node == null || node.isNull || !node.isArray) return emptyList()
         return node.mapNotNull { tagNode ->
-            val text = tagNode.asText("").trim()
+            val text = tagNode.textOrEmpty().trim()
             if (text.isBlank()) null else text
         }.distinct()
     }

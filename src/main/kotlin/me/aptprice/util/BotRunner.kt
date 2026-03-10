@@ -274,6 +274,7 @@ class BotRunner(
                     if (stopRunOnAbuse) {
                         abortedByAbuse = true
                         blockedRegionName = regionName
+                        // 다음 실행은 차단된 동일 지역부터 재개
                         nextStartOffset = regionAbsoluteIndex
                         persistRunProgress("ABUSE_ABORTED", blockedRegionName)
                         break@mainLoop
@@ -325,7 +326,11 @@ class BotRunner(
         if (successfulRegions.isEmpty()) {
             if (blockedByAbuse) {
                 log.warn("abuse 차단으로 성공한 지역이 없어 기존 JSON 데이터를 유지합니다.")
-                persistRunProgress("ABUSE_NO_SUCCESS", blockedRegionName)
+                if (abortedByAbuse) {
+                    persistRunProgress("ABUSE_ABORTED", blockedRegionName)
+                } else {
+                    persistRunProgress("ABUSE_NO_SUCCESS", blockedRegionName)
+                }
             } else {
                 log.warn("성공한 지역이 없어 기존 JSON 데이터를 유지합니다.")
                 persistRunProgress("NO_SUCCESS")

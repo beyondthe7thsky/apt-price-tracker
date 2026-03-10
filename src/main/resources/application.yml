@@ -27,6 +27,9 @@ naver:
     max-complex-pages: 1
     max-complex-pages-on-overflow: 3
     max-overflow-complexes-per-region: 0
+    overflow-batch-size: 2
+    overflow-batch-cooldown-min-ms: 20000
+    overflow-batch-cooldown-max-ms: 35000
     max-complexes-per-region: 0
     rotate-complexes-by-day: true
     complex-delay-min-ms: 700
