@@ -275,6 +275,9 @@ class TeamsNotifierService(
         if (listing.featureDesc.isNotBlank()) {
             detailParts.add("특징 ${shortFeature(listing.featureDesc)}")
         }
+        if (listing.tagList.isNotEmpty()) {
+            detailParts.add("태그 ${shortTags(listing.tagList)}")
+        }
 
         val detailText = if (detailParts.isEmpty()) "" else " (${detailParts.joinToString(", ")})"
         return "**[$type]** ${listing.regionName} ${listing.title} **${formatPrice(listing.price)}**$detailText - [상세보기](${listing.url})"
@@ -302,6 +305,13 @@ class TeamsNotifierService(
         val normalized = raw.replace("\n", " ").replace("\r", " ").trim()
         if (normalized.length <= maxLength) return normalized
         return normalized.take(maxLength) + "…"
+    }
+
+    private fun shortTags(tags: List<String>, maxCount: Int = 3): String {
+        if (tags.isEmpty()) return "-"
+        val picked = tags.map { it.trim() }.filter { it.isNotBlank() }.take(maxCount)
+        if (picked.isEmpty()) return "-"
+        return picked.joinToString(", ")
     }
 
     private fun isPowerAutomateUrl(url: String): Boolean =

@@ -414,6 +414,7 @@ class BotRunner(
         val normalizedHsehCnt = if (fresh.hsehCnt > 0) fresh.hsehCnt else old.hsehCnt
         val normalizedBuildingName = if (fresh.buildingName.isNotBlank()) fresh.buildingName else old.buildingName
         val normalizedFeatureDesc = if (fresh.featureDesc.isNotBlank()) fresh.featureDesc else old.featureDesc
+        val normalizedTagList = if (fresh.tagList.isNotEmpty()) fresh.tagList else old.tagList
 
         return fresh.copy(
             updatedAt = now,
@@ -422,6 +423,7 @@ class BotRunner(
             hsehCnt = normalizedHsehCnt,
             buildingName = normalizedBuildingName,
             featureDesc = normalizedFeatureDesc,
+            tagList = normalizedTagList,
             status = nextStatus,
             statusChangedAt = statusChangedAt,
             offMarketAt = null,

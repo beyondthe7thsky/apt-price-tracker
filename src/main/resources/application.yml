@@ -19,7 +19,7 @@ naver:
     max-attempts: 2
     base-backoff-ms: 2000
     backoff-jitter-ms: 1500
-    article-order: prc
+    article-order: prc,date
     max-complex-pages: 1
     max-complex-pages-on-overflow: 3
     max-complexes-per-region: 0

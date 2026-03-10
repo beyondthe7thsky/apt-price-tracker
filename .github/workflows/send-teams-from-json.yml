@@ -95,6 +95,23 @@ jobs:
                   return supply / 3.3058
               return float(as_int(item.get("pyeong", 0), 0))
 
+          def normalize_tag_list(value):
+              if isinstance(value, list):
+                  items = value
+              elif isinstance(value, str):
+                  items = [x.strip() for x in value.split(",")]
+              else:
+                  items = []
+              seen = set()
+              result = []
+              for item in items:
+                  text = str(item).strip()
+                  if not text or text in seen:
+                      continue
+                  seen.add(text)
+                  result.append(text)
+              return result
+
           def normalize_status(v):
               s = str(v or "ACTIVE").strip().upper()
               valid = {"ACTIVE", "RELISTED", "OFF_MARKET_CANDIDATE", "OFF_MARKET"}
@@ -181,6 +198,7 @@ jobs:
               area_supply_sqm = as_float(it.get("areaSupplySqm", 0.0), 0.0)
               area_exclusive_sqm = as_float(it.get("areaExclusiveSqm", it.get("areaSqm", 0.0)), 0.0)
               pyeong = derive_pyeong(it)
+              tag_list = normalize_tag_list(it.get("tagList", []))
 
               prices = complex_price_map.get(complex_key(it), [])
               avg_price = round(sum(prices) / len(prices)) if prices else 0
@@ -199,6 +217,8 @@ jobs:
                       "region": region,
                       "title": str(it.get("title", "")),
                       "featureDesc": str(it.get("featureDesc", "")),
+                      "tagList": tag_list,
+                      "tagText": " · ".join(tag_list[:5]) if tag_list else "-",
                       "hsehCnt": as_int(it.get("hsehCnt", 0), 0),
                       "price": price,
                       "priceText": format_price(price),
@@ -268,6 +288,7 @@ jobs:
               td.price{font-weight:800;white-space:nowrap}
               td.dim{color:var(--muted);white-space:nowrap}
               td.feature{max-width:340px;color:#334155;white-space:normal;word-break:keep-all;line-height:1.35}
+              td.tags{max-width:260px;color:#475569;white-space:normal;word-break:keep-all;line-height:1.35}
               .badge{display:inline-block;padding:3px 7px;border-radius:999px;font-size:11px;font-weight:800;border:1px solid}
               .b-bargain{background:#ffe4e6;color:#9f1239;border-color:#fecdd3}
               .b-cheap{background:#ecfeff;color:#155e75;border-color:#a5f3fc}
@@ -313,7 +334,7 @@ jobs:
                 <select id=\"city\"></select>
                 <select id=\"region\"></select>
                 <select id=\"priceBand\"><option value=\"\">가격대(전체)</option><option>8억 미만</option><option>8~9억대</option><option>9~10억대</option><option>10~12억대</option><option>12억 이상</option></select>
-                <select id=\"pyeongBand\"><option value=\"\">평형(공급,전체)</option><option>20평대</option><option>30평대</option></select>
+                <select id=\"pyeongBand\"><option value=\"\">평형(공급면적 기준,전체)</option><option>20평대</option><option>30평대</option></select>
                 <select id=\"householdBand\"><option value=\"\">세대수(전체)</option><option value=\"le300\">300세대 이하</option><option value=\"r300_500\">300~500세대</option><option value=\"r500_700\">500~700세대</option><option value=\"ge700\">700세대 이상</option><option value=\"policy_hidden\">정책상 비공개(상세보기)</option></select>
                 <select id=\"signal\"><option value=\"\">판단(전체)</option><option>급매</option><option>저렴</option><option>보통</option></select>
                 <select id=\"status\"><option value=\"\">상태(전체)</option><option>판매중</option><option>다시 등록된 매물(판매중)</option></select>
@@ -341,7 +362,7 @@ jobs:
               const sTotal=document.getElementById('sTotal'),sRegions=document.getElementById('sRegions'),sBargain=document.getElementById('sBargain'),sCheap=document.getElementById('sCheap');
               const CITY_COLOR={"수원":"#2563eb","용인수지":"#0f766e","서울양천":"#9333ea","서울강서":"#0284c7","서울영등포":"#0891b2","서울동작":"#dc2626","서울관악":"#ea580c","서울구로":"#16a34a","서울금천":"#ca8a04","서울성동":"#4f46e5","서울마포":"#7c3aed","서울용산":"#be123c","서울은평":"#0d9488","서울강동":"#1d4ed8","서울동대문":"#c2410c","서울광진":"#7e22ce","서울서대문":"#0f766e","서울성북":"#475569","성남판교":"#0f766e","성남분당":"#2563eb","성남수정":"#be123c","성남중원":"#0891b2","안양":"#ea580c"};
               const SORT_DEFAULT={key:'price',dir:'asc'};
-              const FIRST_DIR={city:'asc',title:'asc',featureDesc:'asc',price:'asc',avgPrice:'desc',diffPct:'asc',signal:'asc',statusLabel:'asc',hsehCnt:'desc',areaSupplyPyeong:'desc'};
+              const FIRST_DIR={city:'asc',title:'asc',featureDesc:'asc',tagText:'asc',price:'asc',avgPrice:'desc',diffPct:'asc',signal:'asc',statusLabel:'asc',hsehCnt:'desc',areaSupplyPyeong:'desc'};
               const sortState={...SORT_DEFAULT};
               const esc=(s)=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
               const uniq=(a)=>Array.from(new Set(a)).sort((x,y)=>String(x).localeCompare(String(y),'ko'));
@@ -367,9 +388,9 @@ jobs:
                 const n=Number(h||0);
                 return n>0 ? `${n}세대` : '정책상 비공개(상세보기)';
               }
-              function filtered(){const city=cityEl.value,region=regionEl.value,priceBand=priceEl.value,pyeongBand=pyeongEl.value,householdBand=householdEl.value,signal=signalEl.value,status=statusEl.value,q=qEl.value.trim().toLowerCase();return RAW.filter(x=>{if(city&&x.city!==city)return false;if(region&&x.region!==region)return false;if(priceBand&&x.priceBand!==priceBand)return false;if(pyeongBand&&x.pyeongBand!==pyeongBand)return false;if(!householdMatch(x.hsehCnt,householdBand))return false;if(signal&&x.signal!==signal)return false;if(status&&x.statusLabel!==status)return false;if(q&&!`${x.region} ${x.title} ${x.featureDesc || ''}`.toLowerCase().includes(q))return false;return true;});}
+              function filtered(){const city=cityEl.value,region=regionEl.value,priceBand=priceEl.value,pyeongBand=pyeongEl.value,householdBand=householdEl.value,signal=signalEl.value,status=statusEl.value,q=qEl.value.trim().toLowerCase();return RAW.filter(x=>{if(city&&x.city!==city)return false;if(region&&x.region!==region)return false;if(priceBand&&x.priceBand!==priceBand)return false;if(pyeongBand&&x.pyeongBand!==pyeongBand)return false;if(!householdMatch(x.hsehCnt,householdBand))return false;if(signal&&x.signal!==signal)return false;if(status&&x.statusLabel!==status)return false;if(q&&!`${x.region} ${x.title} ${x.featureDesc || ''} ${x.tagText || ''}`.toLowerCase().includes(q))return false;return true;});}
               function compareRows(a,b,key){
-                if(['city','title','featureDesc','signal','statusLabel','region'].includes(key)){
+                if(['city','title','featureDesc','tagText','signal','statusLabel','region'].includes(key)){
                   return String(a[key]??'').localeCompare(String(b[key]??''),'ko');
                 }
                 const an=Number(a[key]??0), bn=Number(b[key]??0);
@@ -411,14 +432,14 @@ jobs:
                   const countNormal=items.filter(x=>x.signal==='보통').length;
                   const chips=`<span class="chip city">${esc(city)}</span><span class="chip s-bargain">급매 ${countBargain}</span><span class="chip s-cheap">저렴 ${countCheap}</span><span class="chip s-normal">보통 ${countNormal}</span>`;
 
-                  const rowsHtml=items.map(it=>`<tr><td data-label="도시">${esc(it.city)}</td><td data-label="단지/매물">${esc(it.title)}</td><td data-label="특징" class="feature">${esc(shortFeature(it.featureDesc))}</td><td data-label="매물가" class="price">${esc(it.priceText)}</td><td data-label="단지 평균가">${esc(it.avgPriceText)}</td><td data-label="평균대비" class="${diffClass(it.diffPct)}">${esc(diffText(it.diffPct))}</td><td data-label="판단"><span class="badge ${signalClass(it.signal)}">${esc(it.signal)}</span></td><td data-label="상태"><span class="badge ${statusClass(it.statusLabel)}">${esc(it.statusLabel)}</span></td><td data-label="세대수" class="dim">${esc(householdText(it.hsehCnt))}</td><td data-label="공급/전용(평)" class="dim">${esc(it.areaSupplyPyeongText)}/${esc(it.areaExclusivePyeongText)}평</td><td data-label="층" class="dim">${esc(it.floor)}</td><td data-label="매물"><a href="${esc(it.url)}" target="_blank">상세보기</a></td><td data-label="지도"><a href="${esc(mapUrl(it))}" target="_blank">지도</a></td></tr>`).join('');
+                  const rowsHtml=items.map(it=>`<tr><td data-label="도시">${esc(it.city)}</td><td data-label="단지/매물">${esc(it.title)}</td><td data-label="특징" class="feature">${esc(shortFeature(it.featureDesc))}</td><td data-label="태그" class="tags">${esc(it.tagText || '-')}</td><td data-label="매물가" class="price">${esc(it.priceText)}</td><td data-label="단지 평균가">${esc(it.avgPriceText)}</td><td data-label="평균대비" class="${diffClass(it.diffPct)}">${esc(diffText(it.diffPct))}</td><td data-label="판단"><span class="badge ${signalClass(it.signal)}">${esc(it.signal)}</span></td><td data-label="상태"><span class="badge ${statusClass(it.statusLabel)}">${esc(it.statusLabel)}</span></td><td data-label="세대수" class="dim">${esc(householdText(it.hsehCnt))}</td><td data-label="평형(공급/전용)" class="dim">${esc(it.areaSupplyPyeongText)}평(${esc(it.areaSupplySqmText)}㎡) / ${esc(it.areaExclusivePyeongText)}평(${esc(it.areaExclusiveSqmText)}㎡)</td><td data-label="층" class="dim">${esc(it.floor)}</td><td data-label="매물"><a href="${esc(it.url)}" target="_blank">상세보기</a></td><td data-label="지도"><a href="${esc(mapUrl(it))}" target="_blank">지도</a></td></tr>`).join('');
 
                   const headerCell=(label,key='')=>{
                     if(!key) return `<th>${label}</th>`;
                     const active=sortState.key===key ? 'active' : '';
                     return `<th class="sortable ${active}" data-sort="${key}">${label}<span class="sort-indicator">${sortIndicator(key)}</span></th>`;
                   };
-                  const headerHtml=`<tr>${headerCell('도시','city')}${headerCell('단지/매물','title')}${headerCell('특징','featureDesc')}${headerCell('매물가','price')}${headerCell('단지 평균가','avgPrice')}${headerCell('평균대비','diffPct')}${headerCell('판단','signal')}${headerCell('상태','statusLabel')}${headerCell('세대수','hsehCnt')}${headerCell('공급/전용(평)','areaSupplyPyeong')}${headerCell('층')}${headerCell('매물')}${headerCell('지도')}</tr>`;
+                  const headerHtml=`<tr>${headerCell('도시','city')}${headerCell('단지/매물','title')}${headerCell('특징','featureDesc')}${headerCell('태그','tagText')}${headerCell('매물가','price')}${headerCell('단지 평균가','avgPrice')}${headerCell('평균대비','diffPct')}${headerCell('판단','signal')}${headerCell('상태','statusLabel')}${headerCell('세대수','hsehCnt')}${headerCell('평형(공급/전용)','areaSupplyPyeong')}${headerCell('층')}${headerCell('매물')}${headerCell('지도')}</tr>`;
 
                   return `<section class="region" style="--accent:${accent};"><div class="head"><div class="title">${esc(name)} <span style="color:#64748b;font-size:13px;">(${items.length}건)</span></div><div class="chips">${chips}</div></div><div class="table-wrap"><table><thead>${headerHtml}</thead><tbody>${rowsHtml}</tbody></table></div></section>`;
                 }).join('');

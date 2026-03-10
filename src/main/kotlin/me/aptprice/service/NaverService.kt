@@ -43,8 +43,8 @@ class NaverService(private val objectMapper: ObjectMapper) {
     @Value("\${naver.safe.max-complex-pages-on-overflow:3}")
     private var maxComplexPagesOnOverflow: Int = 3
 
-    @Value("\${naver.safe.article-order:prc}")
-    private var articleOrder: String = "prc"
+    @Value("\${naver.safe.article-order:prc,date}")
+    private var articleOrder: String = "prc,date"
 
     @Value("\${naver.safe.max-complexes-per-region:35}")
     private var maxComplexesPerRegion: Int = 35
@@ -180,57 +180,139 @@ class NaverService(private val objectMapper: ObjectMapper) {
 
     private fun fetchComplexArticles(regionName: String, complex: ComplexInfo): ArticleFetchResult {
         val listings = mutableListOf<Listing>()
-        var page = 1
+        val orders = parsedArticleOrders()
         val configuredMaxPages = maxComplexPages.coerceAtLeast(1)
         var effectiveMaxPages = configuredMaxPages
 
-        while (page <= effectiveMaxPages) {
-            val order = articleOrder.trim().ifBlank { "prc" }
-            val url =
-                "https://m.land.naver.com/complex/getComplexArticleList?hscpNo=${complex.hscpNo}&rletTpCd=A01&tradTpCd=A1&order=$order&page=$page"
-            val response = requestBodyWithRetry(url, "https://m.land.naver.com/complex/info/${complex.hscpNo}")
-            if (response.blockedByAbuse) {
+        val firstOrder = orders.first()
+        val firstPage = fetchArticlePage(regionName, complex, firstOrder, 1)
+        if (firstPage.blockedByAbuse) {
+            return ArticleFetchResult(listings = listings, blockedByAbuse = true)
+        }
+        if (firstPage.timedOut) {
+            return ArticleFetchResult(listings = listings)
+        }
+        if (!firstPage.hasData) {
+            return ArticleFetchResult(listings = listings)
+        }
+        firstPage.nodes.forEach { node ->
+            mapArticleNode(regionName, complex, node)?.let { listings.add(it) }
+        }
+
+        if (configuredMaxPages == 1 && firstPage.moreDataYn == "Y" && firstPage.nodes.size >= 20) {
+            val overflowMaxPages = maxComplexPagesOnOverflow.coerceAtLeast(1)
+            if (overflowMaxPages > effectiveMaxPages) {
+                effectiveMaxPages = overflowMaxPages
+                log.info(
+                    "{} {} 매물량 많음(1페이지 {}건) -> 수집 페이지를 {}까지 확장",
+                    regionName,
+                    complex.hscpNm,
+                    firstPage.nodes.size,
+                    effectiveMaxPages
+                )
+            }
+        }
+
+        val pageBudgets = allocatePageBudgets(effectiveMaxPages, orders.size)
+
+        // 1) 첫 정렬(보통 prc) 페이지 2..N
+        var nextPage = 2
+        var moreDataYn = firstPage.moreDataYn
+        while (nextPage <= pageBudgets[0] && moreDataYn == "Y") {
+            Thread.sleep(randomDelayMs(pageDelayMinMs, pageDelayMaxMs, 1_500L, 3_500L))
+            val pageResult = fetchArticlePage(regionName, complex, firstOrder, nextPage)
+            if (pageResult.blockedByAbuse) {
                 return ArticleFetchResult(listings = listings, blockedByAbuse = true)
             }
-            if (response.timedOut) {
-                log.warn("{} {} 페이지 {} 조회 타임아웃으로 단지 수집을 중단합니다.", regionName, complex.hscpNm, page)
-                break
-            }
-            val body = response.body ?: break
-
-            val root = runCatching { objectMapper.readTree(body) }.getOrElse {
-                log.warn("{} {} 페이지 {} 파싱 실패: {}", regionName, complex.hscpNm, page, it.message)
-                break
-            }
-
-            val result = root.get("result") ?: break
-            val list = result.get("list") ?: break
-            if (!list.isArray || list.isEmpty) break
-
-            list.forEach { node ->
+            if (pageResult.timedOut || !pageResult.hasData) break
+            pageResult.nodes.forEach { node ->
                 mapArticleNode(regionName, complex, node)?.let { listings.add(it) }
             }
+            moreDataYn = pageResult.moreDataYn
+            nextPage += 1
+        }
 
-            val moreDataYn = result.get("moreDataYn")?.asText("").orEmpty()
-            if (page == 1 && configuredMaxPages == 1 && moreDataYn == "Y" && list.size() >= 20) {
-                val overflowMaxPages = maxComplexPagesOnOverflow.coerceAtLeast(1)
-                if (overflowMaxPages > effectiveMaxPages) {
-                    effectiveMaxPages = overflowMaxPages
-                    log.info(
-                        "{} {} 매물량 많음(1페이지 {}건) -> 수집 페이지를 {}까지 확장",
-                        regionName,
-                        complex.hscpNm,
-                        list.size(),
-                        effectiveMaxPages
-                    )
+        // 2) 나머지 정렬(date 등) 페이지 1..N (총 페이지 예산은 유지)
+        for (orderIndex in 1 until orders.size) {
+            val order = orders[orderIndex]
+            val budget = pageBudgets[orderIndex]
+            if (budget <= 0) continue
+
+            var page = 1
+            var orderMoreDataYn = "Y"
+            while (page <= budget && orderMoreDataYn == "Y") {
+                Thread.sleep(randomDelayMs(pageDelayMinMs, pageDelayMaxMs, 1_500L, 3_500L))
+                val pageResult = fetchArticlePage(regionName, complex, order, page)
+                if (pageResult.blockedByAbuse) {
+                    return ArticleFetchResult(listings = listings, blockedByAbuse = true)
                 }
+                if (pageResult.timedOut || !pageResult.hasData) break
+                pageResult.nodes.forEach { node ->
+                    mapArticleNode(regionName, complex, node)?.let { listings.add(it) }
+                }
+                orderMoreDataYn = pageResult.moreDataYn
+                page += 1
             }
-            if (moreDataYn != "Y") break
-            page += 1
-            Thread.sleep(randomDelayMs(pageDelayMinMs, pageDelayMaxMs, 1_500L, 3_500L))
         }
 
         return ArticleFetchResult(listings = listings)
+    }
+
+    private fun fetchArticlePage(
+        regionName: String,
+        complex: ComplexInfo,
+        order: String,
+        page: Int,
+    ): ArticlePageResult {
+        val url =
+            "https://m.land.naver.com/complex/getComplexArticleList?hscpNo=${complex.hscpNo}&rletTpCd=A01&tradTpCd=A1&order=$order&page=$page"
+        val response = requestBodyWithRetry(url, "https://m.land.naver.com/complex/info/${complex.hscpNo}")
+        if (response.blockedByAbuse) {
+            return ArticlePageResult(blockedByAbuse = true)
+        }
+        if (response.timedOut) {
+            log.warn("{} {} [{}] 페이지 {} 조회 타임아웃으로 단지 수집을 중단합니다.", regionName, complex.hscpNm, order, page)
+            return ArticlePageResult(timedOut = true)
+        }
+        val body = response.body ?: return ArticlePageResult(hasData = false)
+
+        val root = runCatching { objectMapper.readTree(body) }.getOrElse {
+            log.warn("{} {} [{}] 페이지 {} 파싱 실패: {}", regionName, complex.hscpNm, order, page, it.message)
+            return ArticlePageResult(hasData = false)
+        }
+
+        val result = root.get("result") ?: return ArticlePageResult(hasData = false)
+        val list = result.get("list") ?: return ArticlePageResult(hasData = false)
+        if (!list.isArray || list.isEmpty) return ArticlePageResult(hasData = false)
+
+        return ArticlePageResult(
+            nodes = list.toList(),
+            moreDataYn = result.get("moreDataYn")?.asText("").orEmpty(),
+            hasData = true
+        )
+    }
+
+    private fun parsedArticleOrders(): List<String> {
+        val parsed = articleOrder
+            .split(",")
+            .map { it.trim().lowercase() }
+            .filter { it.isNotBlank() }
+            .distinct()
+        return if (parsed.isEmpty()) listOf("prc") else parsed
+    }
+
+    private fun allocatePageBudgets(totalPages: Int, orderCount: Int): IntArray {
+        if (orderCount <= 1) {
+            return intArrayOf(totalPages.coerceAtLeast(1))
+        }
+        val safeTotal = totalPages.coerceAtLeast(1)
+        val base = safeTotal / orderCount
+        val remainder = safeTotal % orderCount
+        val budgets = IntArray(orderCount) { index ->
+            base + if (index < remainder) 1 else 0
+        }
+        if (budgets[0] <= 0) budgets[0] = 1
+        return budgets
     }
 
     private fun mapArticleNode(regionName: String, complex: ComplexInfo, node: JsonNode): Listing? {
@@ -254,6 +336,7 @@ class NaverService(private val objectMapper: ObjectMapper) {
 
         val title = node.get("atclNm")?.asText()?.trim().orEmpty().ifBlank { complex.hscpNm }
         val featureDesc = node.get("atclFetrDesc")?.asText()?.trim().orEmpty()
+        val tagList = parseTagList(node.get("tagList"))
         val buildingName = node.get("bildNm")?.asText()?.trim().orEmpty()
         val floor = node.get("flrInfo")?.asText()?.trim().orEmpty()
         val sameAddrHash = node.get("sameAddrHash")?.asText("")?.trim().orEmpty()
@@ -265,6 +348,7 @@ class NaverService(private val objectMapper: ObjectMapper) {
             buildingName = buildingName,
             title = title,
             featureDesc = featureDesc,
+            tagList = tagList,
             regionName = regionName,
             price = parsedPrice,
             floor = floor,
@@ -401,6 +485,14 @@ class NaverService(private val objectMapper: ObjectMapper) {
         }.coerceAtLeast(0.0)
     }
 
+    private fun parseTagList(node: JsonNode?): List<String> {
+        if (node == null || node.isNull || !node.isArray) return emptyList()
+        return node.mapNotNull { tagNode ->
+            val text = tagNode.asText("").trim()
+            if (text.isBlank()) null else text
+        }.distinct()
+    }
+
     private fun firstPositive(vararg values: Int): Int =
         values.firstOrNull { it > 0 } ?: 0
 
@@ -462,7 +554,15 @@ class NaverService(private val objectMapper: ObjectMapper) {
 
     private data class ArticleFetchResult(
         val listings: List<Listing>,
-        val blockedByAbuse: Boolean = false
+        val blockedByAbuse: Boolean = false,
+    )
+
+    private data class ArticlePageResult(
+        val nodes: List<JsonNode> = emptyList(),
+        val moreDataYn: String = "N",
+        val hasData: Boolean = false,
+        val blockedByAbuse: Boolean = false,
+        val timedOut: Boolean = false,
     )
 
     private data class RequestResult(

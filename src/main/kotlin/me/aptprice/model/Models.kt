@@ -16,6 +16,7 @@ data class Listing(
     val buildingName: String = "",
     val title: String,
     val featureDesc: String = "",
+    val tagList: List<String> = emptyList(),
     val regionName: String,
     val price: Long,
     val floor: String,
