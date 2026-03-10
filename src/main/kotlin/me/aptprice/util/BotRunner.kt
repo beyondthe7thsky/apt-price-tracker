@@ -120,11 +120,12 @@ class BotRunner(
             mapOf("name" to "서울은평_진관동", "code" to "1138011400"),
             mapOf("name" to "서울은평_응암동", "code" to "1138010700"),
 
-            // 7) 성남 판교권
-            mapOf("name" to "성남판교_판교동", "code" to "4113510900"),
-            mapOf("name" to "성남판교_삼평동", "code" to "4113511000"),
-            mapOf("name" to "성남판교_백현동", "code" to "4113511100"),
-            mapOf("name" to "성남판교_운중동", "code" to "4113511200"),
+            // 7) 성남 분당/판교권
+            mapOf("name" to "성남분당_야탑동", "code" to "4113510700"),
+            mapOf("name" to "성남판교_판교동", "code" to "4113510800"),
+            mapOf("name" to "성남판교_삼평동", "code" to "4113510900"),
+            mapOf("name" to "성남판교_백현동", "code" to "4113511000"),
+            mapOf("name" to "성남판교_운중동", "code" to "4113511500"),
 
             // 8) 안양권
             mapOf("name" to "안양_안양동", "code" to "4117110100"),
@@ -279,7 +280,7 @@ class BotRunner(
                 notifyList.add(Pair(normalizedListing, "신규✨"))
             } else if (normalizedListing.status == MarketStatus.RELISTED) {
                 relistedChanged += 1
-                notifyList.add(Pair(normalizedListing, "재등록♻️"))
+                notifyList.add(Pair(normalizedListing, "다시 등록된 매물♻️"))
             } else if (freshListing.price < oldListing.price) {
                 notifyList.add(Pair(normalizedListing, "급매⬇️${oldListing.price - freshListing.price}만"))
             }
@@ -310,7 +311,7 @@ class BotRunner(
             offMarketCount
         )
         log.info(
-            "상태 전환 - 거래종결 후보 전환: {}건, 거래종결 추정 전환: {}건, 재등록 전환: {}건",
+            "상태 전환 - 거래종결 후보 전환: {}건, 거래종결 추정 전환: {}건, 다시 등록된 매물 전환: {}건",
             offMarketCandidateChanged,
             offMarketChanged,
             relistedChanged
