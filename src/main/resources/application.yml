@@ -10,7 +10,7 @@ bot:
     start-region-offset: 0
     retry-region-after-abuse: true
     max-abuse-retry-per-region: 1
-    max-abuse-wait-ms: 480000
+    max-abuse-wait-ms: 300000
     region-delay-min-ms: 0
     region-delay-max-ms: 0
 
@@ -32,4 +32,4 @@ naver:
     page-delay-min-ms: 0
     page-delay-max-ms: 0
     request-timeout-ms: 20000
-    abuse-cooldown-minutes: 8
+    abuse-cooldown-minutes: 5
