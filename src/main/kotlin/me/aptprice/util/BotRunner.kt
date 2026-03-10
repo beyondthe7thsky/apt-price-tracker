@@ -118,7 +118,20 @@ class BotRunner(
             mapOf("name" to "서울중구_신당동", "code" to "1114016200"),
             mapOf("name" to "서울중구_중림동", "code" to "1114017100"),
             mapOf("name" to "서울은평_진관동", "code" to "1138011400"),
-            mapOf("name" to "서울은평_응암동", "code" to "1138010700")
+            mapOf("name" to "서울은평_응암동", "code" to "1138010700"),
+
+            // 7) 성남 판교권
+            mapOf("name" to "성남판교_판교동", "code" to "4113510900"),
+            mapOf("name" to "성남판교_삼평동", "code" to "4113511000"),
+            mapOf("name" to "성남판교_백현동", "code" to "4113511100"),
+            mapOf("name" to "성남판교_운중동", "code" to "4113511200"),
+
+            // 8) 안양권
+            mapOf("name" to "안양_안양동", "code" to "4117110100"),
+            mapOf("name" to "안양_비산동", "code" to "4117310100"),
+            mapOf("name" to "안양_관양동", "code" to "4117310200"),
+            mapOf("name" to "안양_평촌동", "code" to "4117310300"),
+            mapOf("name" to "안양_호계동", "code" to "4117310400")
         )
 
         val totalRegions = targetRegions.size
@@ -231,7 +244,7 @@ class BotRunner(
         var offMarketChanged = 0
         var relistedChanged = 0
 
-        // 기존 매물 처리: 이번 실행에 성공한 지역에서 미노출이면 소진 후보/소진으로 상태 전환
+        // 기존 매물 처리: 이번 실행에 성공한 지역에서 미노출이면 거래종결 후보/추정으로 상태 전환
         oldData.forEach { (articleNo, oldListing) ->
             if (newByArticleNo.containsKey(articleNo)) return@forEach
 
@@ -297,7 +310,7 @@ class BotRunner(
             offMarketCount
         )
         log.info(
-            "상태 전환 - 소진후보 전환: {}건, 소진 전환: {}건, 재등록 전환: {}건",
+            "상태 전환 - 거래종결 후보 전환: {}건, 거래종결 추정 전환: {}건, 재등록 전환: {}건",
             offMarketCandidateChanged,
             offMarketChanged,
             relistedChanged

@@ -20,7 +20,7 @@ naver:
     base-backoff-ms: 2000
     backoff-jitter-ms: 1500
     max-complex-pages: 1
-    max-complexes-per-region: 25
+    max-complexes-per-region: 20
     rotate-complexes-by-day: true
     complex-delay-min-ms: 1800
     complex-delay-max-ms: 3600

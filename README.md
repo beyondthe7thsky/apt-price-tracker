@@ -11,13 +11,13 @@
 
 ## 핵심 기능
 
-- 대상 지역(현재 70개 동) 순회 수집
+- 대상 지역(현재 79개 동) 순회 수집
 - 20~39평 매물만 저장
 - 매물 상태 라이프사이클 관리
-  - `ACTIVE` (활성)
-  - `OFF_MARKET_CANDIDATE` (소진후보)
-  - `OFF_MARKET` (소진추정)
-  - `RELISTED` (재등록)
+  - `ACTIVE` (판매중)
+  - `OFF_MARKET_CANDIDATE` (거래종결 후보)
+  - `OFF_MARKET` (거래종결 추정)
+  - `RELISTED` (재등록(판매중))
 - 가격 신호 분류
   - 급매: 평균 대비 `-10%` 이하
   - 저렴: 평균 대비 `-5%` 이하
@@ -27,7 +27,7 @@
 ## 매물 상태 처리 규칙
 
 - 이번 실행에서 **성공한 지역** 기준으로만 상태 전환
-- 미노출 1~N회 누적 시 `OFF_MARKET_CANDIDATE` → 임계치 도달 시 `OFF_MARKET`
+- 미노출 1~N회 누적 시 `OFF_MARKET_CANDIDATE`(거래종결 후보) → 임계치 도달 시 `OFF_MARKET`(거래종결 추정)
 - `OFF_MARKET` 매물이 다시 보이면 `RELISTED`
 - 지역 수집 중 차단/실패가 나면 해당 지역 데이터는 이번 회차 상태 전환에서 제외
 
@@ -77,10 +77,10 @@
 - `bot.safe.retry-region-after-abuse`: 차단 시 지역 재시도 활성화
 - `bot.safe.max-abuse-retry-per-region`: 차단 시 지역별 최대 재시도 횟수
 - `bot.safe.max-abuse-wait-ms`: 차단 재시도 전 최대 대기 시간
-- `bot.market.off-market-confirm-miss-count`: 소진추정 전환 임계치
+- `bot.market.off-market-confirm-miss-count`: 거래종결 추정 전환 임계치
 - `naver.safe.abuse-cooldown-minutes`: abuse 감지 후 쿨다운(기본 `8`분)
 - `naver.safe.request-timeout-ms`: 요청 타임아웃
-- `naver.safe.max-complexes-per-region`: 지역별 단지 수집 상한(기본 `25`)
+- `naver.safe.max-complexes-per-region`: 지역별 단지 수집 상한(기본 `20`)
 - `naver.safe.rotate-complexes-by-day`: 단지 상한 적용 시 일자별 수집 단지 순환
 
 ## 로컬 실행

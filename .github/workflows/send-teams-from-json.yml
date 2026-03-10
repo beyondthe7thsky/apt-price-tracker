@@ -75,11 +75,11 @@ jobs:
 
           def status_label(status):
               return {
-                  "ACTIVE": "활성",
-                  "RELISTED": "재등록",
-                  "OFF_MARKET_CANDIDATE": "소진후보",
-                  "OFF_MARKET": "소진추정",
-              }.get(status, "활성")
+                  "ACTIVE": "판매중",
+                  "RELISTED": "재등록(판매중)",
+                  "OFF_MARKET_CANDIDATE": "거래종결 후보",
+                  "OFF_MARKET": "거래종결 추정",
+              }.get(status, "판매중")
 
           listings = [x for x in data if isinstance(x, dict)]
           if region_filter:
@@ -274,7 +274,7 @@ jobs:
                 <select id=\"pyeongBand\"><option value=\"\">평형(전체)</option><option>20평대</option><option>30평대</option></select>
                 <select id=\"householdBand\"><option value=\"\">세대수(전체)</option><option value=\"le300\">300세대 이하</option><option value=\"ge300\">300세대 이상</option><option value=\"ge500\">500세대 이상</option><option value=\"ge700\">700세대 이상</option><option value=\"ge7000\">7000세대 이상</option></select>
                 <select id=\"signal\"><option value=\"\">판단(전체)</option><option>급매</option><option>저렴</option><option>보통</option></select>
-                <select id=\"status\"><option value=\"\">상태(전체)</option><option>활성</option><option>재등록</option></select>
+                <select id=\"status\"><option value=\"\">상태(전체)</option><option>판매중</option><option>재등록(판매중)</option></select>
                 <input id=\"q\" placeholder=\"지역/단지명 검색\"/>
                 <button id=\"resetBtn\">필터 초기화</button>
               </div>
@@ -284,9 +284,9 @@ jobs:
                 <div class=\"stat\"><div class=\"k\">지역 수</div><div class=\"v\" id=\"sRegions\">0</div></div>
                 <div class=\"stat\"><div class=\"k\">급매</div><div class=\"v\" id=\"sBargain\">0</div></div>
                 <div class=\"stat\"><div class=\"k\">저렴</div><div class=\"v\" id=\"sCheap\">0</div></div>
-                <div class=\"stat\"><div class=\"k\">재등록</div><div class=\"v\" id=\"sRelisted\">__RELISTED__</div></div>
-                <div class=\"stat\"><div class=\"k\">소진후보</div><div class=\"v\">__CANDIDATE__</div></div>
-                <div class=\"stat\"><div class=\"k\">소진추정</div><div class=\"v\">__OFFMARKET__</div></div>
+                <div class=\"stat\"><div class=\"k\">재등록(판매중)</div><div class=\"v\" id=\"sRelisted\">__RELISTED__</div></div>
+                <div class=\"stat\"><div class=\"k\">거래종결 후보</div><div class=\"v\">__CANDIDATE__</div></div>
+                <div class=\"stat\"><div class=\"k\">거래종결 추정</div><div class=\"v\">__OFFMARKET__</div></div>
               </div>
 
               <div id=\"regions\"></div>
@@ -302,7 +302,7 @@ jobs:
               const uniq=(a)=>Array.from(new Set(a)).sort((x,y)=>String(x).localeCompare(String(y),'ko'));
               const mapUrl=(row)=>`https://map.naver.com/p/search/${encodeURIComponent(`${row.region} ${row.title}`)}`;
               const signalClass=(v)=>v==='급매'?'b-bargain':(v==='저렴'?'b-cheap':'b-normal');
-              const statusClass=(v)=>v==='재등록'?'status-relisted':'status-active';
+              const statusClass=(v)=>v==='재등록(판매중)'?'status-relisted':'status-active';
               function cityColor(city){ if(CITY_COLOR[city]) return CITY_COLOR[city]; const palette=["#2563eb","#0f766e","#9333ea","#0284c7","#dc2626","#16a34a","#ea580c"]; let h=0; for(const c of city) h=(h*31+c.charCodeAt(0))>>>0; return palette[h%palette.length]; }
               function fillCities(){const c=uniq(RAW.map(x=>x.city));cityEl.innerHTML=`<option value="">도시(전체)</option>`+c.map(v=>`<option>${esc(v)}</option>`).join('');}
               function fillRegions(){const city=cityEl.value;const src=city?RAW.filter(x=>x.city===city):RAW;const r=uniq(src.map(x=>x.region));const prev=regionEl.value;regionEl.innerHTML=`<option value="">지역(전체)</option>`+r.map(v=>`<option>${esc(v)}</option>`).join('');if(r.includes(prev))regionEl.value=prev;}
@@ -549,7 +549,7 @@ jobs:
                                                   "width": "stretch",
                                                   "items": [
                                                       {"type": "TextBlock", "text": relisted_count, "weight": "Bolder", "size": "Medium", "horizontalAlignment": "Center"},
-                                                      {"type": "TextBlock", "text": "재등록", "isSubtle": True, "spacing": "None", "horizontalAlignment": "Center"}
+                                                      {"type": "TextBlock", "text": "재등록(판매중)", "isSubtle": True, "spacing": "None", "horizontalAlignment": "Center"}
                                                   ]
                                               }
                                           ]
@@ -563,7 +563,7 @@ jobs:
                                                   "width": "stretch",
                                                   "items": [
                                                       {"type": "TextBlock", "text": candidate_count, "weight": "Bolder", "size": "Medium", "horizontalAlignment": "Center"},
-                                                      {"type": "TextBlock", "text": "소진후보", "isSubtle": True, "spacing": "None", "horizontalAlignment": "Center"}
+                                                      {"type": "TextBlock", "text": "거래종결 후보", "isSubtle": True, "spacing": "None", "horizontalAlignment": "Center"}
                                                   ]
                                               },
                                               {
@@ -571,7 +571,7 @@ jobs:
                                                   "width": "stretch",
                                                   "items": [
                                                       {"type": "TextBlock", "text": off_market_count, "weight": "Bolder", "size": "Medium", "horizontalAlignment": "Center"},
-                                                      {"type": "TextBlock", "text": "소진추정", "isSubtle": True, "spacing": "None", "horizontalAlignment": "Center"}
+                                                      {"type": "TextBlock", "text": "거래종결 추정", "isSubtle": True, "spacing": "None", "horizontalAlignment": "Center"}
                                                   ]
                                               }
                                           ]
