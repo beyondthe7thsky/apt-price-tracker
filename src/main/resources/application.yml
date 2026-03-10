@@ -21,7 +21,7 @@ naver:
     backoff-jitter-ms: 1500
     article-order: prc
     max-complex-pages: 1
-    max-complex-pages-on-overflow: 10
+    max-complex-pages-on-overflow: 3
     max-complexes-per-region: 0
     rotate-complexes-by-day: true
     complex-delay-min-ms: 1800
