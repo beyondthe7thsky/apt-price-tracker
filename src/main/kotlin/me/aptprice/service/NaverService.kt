@@ -478,6 +478,7 @@ class NaverService(private val objectMapper: ObjectMapper) {
     }
 
     private fun randomDelayMs(minMs: Long, maxMs: Long, defaultMinMs: Long, defaultMaxMs: Long): Long {
+        if (minMs <= 0L && maxMs <= 0L) return 0L
         val min = if (minMs > 0) minMs else defaultMinMs
         val max = if (maxMs >= min) maxMs else defaultMaxMs.coerceAtLeast(min)
         return random.nextLong(min, max + 1)

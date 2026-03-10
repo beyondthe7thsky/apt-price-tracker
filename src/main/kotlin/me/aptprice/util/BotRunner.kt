@@ -386,6 +386,9 @@ class BotRunner(
     }
 
     private fun normalizedDelayRange(minMs: Long, maxMs: Long, defaultMinMs: Long, defaultMaxMs: Long): Pair<Long, Long> {
+        if (minMs <= 0L && maxMs <= 0L) {
+            return 0L to 0L
+        }
         val min = if (minMs > 0) minMs else defaultMinMs
         val max = if (maxMs >= min) maxMs else defaultMaxMs.coerceAtLeast(min)
         return min to max
@@ -412,9 +415,9 @@ class BotRunner(
         val statusChangedAt = if (nextStatus != old.status) now else old.statusChangedAt
         val normalizedFirstSeenAt = old.firstSeenAt.ifBlank { old.updatedAt }
         val normalizedHsehCnt = if (fresh.hsehCnt > 0) fresh.hsehCnt else old.hsehCnt
-        val normalizedBuildingName = if (fresh.buildingName.isNotBlank()) fresh.buildingName else old.buildingName
-        val normalizedFeatureDesc = if (fresh.featureDesc.isNotBlank()) fresh.featureDesc else old.featureDesc
-        val normalizedTagList = if (fresh.tagList.isNotEmpty()) fresh.tagList else old.tagList
+        val normalizedBuildingName = fresh.buildingName.ifBlank { old.buildingName }
+        val normalizedFeatureDesc = fresh.featureDesc.ifBlank { old.featureDesc }
+        val normalizedTagList = fresh.tagList.ifEmpty { old.tagList }
 
         return fresh.copy(
             updatedAt = now,
