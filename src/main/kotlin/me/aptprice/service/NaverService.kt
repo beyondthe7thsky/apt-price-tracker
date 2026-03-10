@@ -43,6 +43,9 @@ class NaverService(private val objectMapper: ObjectMapper) {
     @Value("\${naver.safe.max-complex-pages-on-overflow:3}")
     private var maxComplexPagesOnOverflow: Int = 3
 
+    @Value("\${naver.safe.article-order:prc}")
+    private var articleOrder: String = "prc"
+
     @Value("\${naver.safe.max-complexes-per-region:35}")
     private var maxComplexesPerRegion: Int = 35
 
@@ -182,8 +185,9 @@ class NaverService(private val objectMapper: ObjectMapper) {
         var effectiveMaxPages = configuredMaxPages
 
         while (page <= effectiveMaxPages) {
+            val order = articleOrder.trim().ifBlank { "prc" }
             val url =
-                "https://m.land.naver.com/complex/getComplexArticleList?hscpNo=${complex.hscpNo}&rletTpCd=A01&tradTpCd=A1&order=prc&page=$page"
+                "https://m.land.naver.com/complex/getComplexArticleList?hscpNo=${complex.hscpNo}&rletTpCd=A01&tradTpCd=A1&order=$order&page=$page"
             val response = requestBodyWithRetry(url, "https://m.land.naver.com/complex/info/${complex.hscpNo}")
             if (response.blockedByAbuse) {
                 return ArticleFetchResult(listings = listings, blockedByAbuse = true)
