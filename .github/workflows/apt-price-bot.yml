@@ -100,7 +100,7 @@ jobs:
         run: ./gradlew --no-daemon clean bootRun
 
       - name: Commit updated data
-        if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.commit_data != 'false') }}
+        if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.commit_data != 'false')) }}
         run: |
           BRANCH="${GITHUB_REF_NAME:-main}"
 

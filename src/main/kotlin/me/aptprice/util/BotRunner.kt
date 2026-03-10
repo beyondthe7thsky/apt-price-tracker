@@ -257,6 +257,16 @@ class BotRunner(
             // 20~39평형만 필터링
             val filtered = listings.filter { it.pyeong in 20..39 }
             allNewListings.addAll(filtered)
+            val checkpointNow = LocalDateTime.now().toString()
+            val checkpoint = buildMergeResult(oldData, allNewListings, successfulRegions, checkpointNow)
+            repository.saveAll(checkpoint.mergedListings)
+            log.info(
+                "체크포인트 저장 - 완료 지역: {}개, 보존 지역: {}개, 이번 노출: {}건, 중간 저장: {}건",
+                successfulRegions.size,
+                (runRegions.size - successfulRegions.size).coerceAtLeast(0),
+                checkpoint.newVisibleCount,
+                checkpoint.mergedListings.size
+            )
 
             if (index < runRegions.lastIndex) {
                 val delayRange = normalizedDelayRange(regionDelayMinMs, regionDelayMaxMs, 3_000L, 7_000L)
@@ -276,6 +286,45 @@ class BotRunner(
         }
 
         val now = LocalDateTime.now().toString()
+        val mergeResult = buildMergeResult(oldData, allNewListings, successfulRegions, now)
+        if (mergeResult.notifyList.isNotEmpty()) {
+            notifier.sendGroupedNotification(mergeResult.notifyList)
+        }
+
+        repository.saveAll(mergeResult.mergedListings)
+        val activeCount = mergeResult.mergedListings.count { it.status == MarketStatus.ACTIVE || it.status == MarketStatus.RELISTED }
+        val candidateCount = mergeResult.mergedListings.count { it.status == MarketStatus.OFF_MARKET_CANDIDATE }
+        val offMarketCount = mergeResult.mergedListings.count { it.status == MarketStatus.OFF_MARKET }
+        log.info(
+            "저장 완료 - 성공 지역: {}개, 보존 지역: {}개, 이번 노출: {}건, 최종 저장: {}건",
+            successfulRegions.size,
+            (runRegions.size - successfulRegions.size).coerceAtLeast(0),
+            mergeResult.newVisibleCount,
+            mergeResult.mergedListings.size
+        )
+        log.info(
+            "상태 요약 - ACTIVE/RELISTED: {}건, OFF_MARKET_CANDIDATE: {}건, OFF_MARKET: {}건",
+            activeCount,
+            candidateCount,
+            offMarketCount
+        )
+        log.info(
+            "상태 전환 - 거래종결 후보 전환: {}건, 거래종결 추정 전환: {}건, 다시 등록된 매물 전환: {}건",
+            mergeResult.offMarketCandidateChanged,
+            mergeResult.offMarketChanged,
+            mergeResult.relistedChanged
+        )
+        if (abuseSkippedRegions > 0) {
+            log.warn("이번 실행에서 abuse 차단으로 스킵된 지역: {}개", abuseSkippedRegions)
+        }
+    }
+
+    private fun buildMergeResult(
+        oldData: Map<String, Listing>,
+        allNewListings: List<Listing>,
+        successfulRegions: Set<String>,
+        now: String,
+    ): MergeResult {
         val newByArticleNo = allNewListings
             .groupBy { it.articleNo }
             .mapValues { (_, items) -> items.maxByOrNull { it.updatedAt } ?: items.first() }
@@ -300,12 +349,8 @@ class BotRunner(
 
             if (transitioned.status != oldListing.status) {
                 when (transitioned.status) {
-                    MarketStatus.OFF_MARKET_CANDIDATE -> {
-                        offMarketCandidateChanged += 1
-                    }
-                    MarketStatus.OFF_MARKET -> {
-                        offMarketChanged += 1
-                    }
+                    MarketStatus.OFF_MARKET_CANDIDATE -> offMarketCandidateChanged += 1
+                    MarketStatus.OFF_MARKET -> offMarketChanged += 1
                     else -> Unit
                 }
             }
@@ -318,48 +363,26 @@ class BotRunner(
             mergedByArticleNo[articleNo] = normalizedListing
 
             if (oldListing == null) {
-                notifyList.add(Pair(normalizedListing, "신규✨"))
+                notifyList.add(normalizedListing to "신규✨")
             } else if (normalizedListing.status == MarketStatus.RELISTED) {
                 relistedChanged += 1
-                notifyList.add(Pair(normalizedListing, "다시 등록된 매물♻️"))
+                notifyList.add(normalizedListing to "다시 등록된 매물♻️")
             } else if (freshListing.price < oldListing.price) {
-                notifyList.add(Pair(normalizedListing, "급매⬇️${oldListing.price - freshListing.price}만"))
+                notifyList.add(normalizedListing to "급매⬇️${oldListing.price - freshListing.price}만")
             }
         }
 
         val mergedListings = mergedByArticleNo.values
             .sortedWith(compareBy<Listing> { it.regionName }.thenBy { it.articleNo })
 
-        if (notifyList.isNotEmpty()) {
-            notifier.sendGroupedNotification(notifyList)
-        }
-
-        repository.saveAll(mergedListings)
-        val activeCount = mergedListings.count { it.status == MarketStatus.ACTIVE || it.status == MarketStatus.RELISTED }
-        val candidateCount = mergedListings.count { it.status == MarketStatus.OFF_MARKET_CANDIDATE }
-        val offMarketCount = mergedListings.count { it.status == MarketStatus.OFF_MARKET }
-        log.info(
-            "저장 완료 - 성공 지역: {}개, 보존 지역: {}개, 이번 노출: {}건, 최종 저장: {}건",
-            successfulRegions.size,
-            (runRegions.size - successfulRegions.size).coerceAtLeast(0),
-            newByArticleNo.size,
-            mergedListings.size
+        return MergeResult(
+            mergedListings = mergedListings,
+            notifyList = notifyList,
+            newVisibleCount = newByArticleNo.size,
+            offMarketCandidateChanged = offMarketCandidateChanged,
+            offMarketChanged = offMarketChanged,
+            relistedChanged = relistedChanged
         )
-        log.info(
-            "상태 요약 - ACTIVE/RELISTED: {}건, OFF_MARKET_CANDIDATE: {}건, OFF_MARKET: {}건",
-            activeCount,
-            candidateCount,
-            offMarketCount
-        )
-        log.info(
-            "상태 전환 - 거래종결 후보 전환: {}건, 거래종결 추정 전환: {}건, 다시 등록된 매물 전환: {}건",
-            offMarketCandidateChanged,
-            offMarketChanged,
-            relistedChanged
-        )
-        if (abuseSkippedRegions > 0) {
-            log.warn("이번 실행에서 abuse 차단으로 스킵된 지역: {}개", abuseSkippedRegions)
-        }
     }
 
     private fun normalizedDelayRange(minMs: Long, maxMs: Long, defaultMinMs: Long, defaultMaxMs: Long): Pair<Long, Long> {
@@ -425,4 +448,13 @@ class BotRunner(
             missCount = newMissCount
         )
     }
+
+    private data class MergeResult(
+        val mergedListings: List<Listing>,
+        val notifyList: List<Pair<Listing, String>>,
+        val newVisibleCount: Int,
+        val offMarketCandidateChanged: Int,
+        val offMarketChanged: Int,
+        val relistedChanged: Int
+    )
 }
