@@ -62,6 +62,9 @@
 - 리포트 워크플로우는 샤드 JSON 자동 병합
   - `data/apt-listings-s*.json` 우선 사용
   - 없으면 `data/apt-listings.json` 사용
+- 기존 통합 파일을 샤드 파일로 1회 변환 가능
+  - `python3 scripts/split_listings_by_shard.py --input data/apt-listings.json --output-dir data`
+  - 수집 워크플로우를 다시 돌리지 않아도 리포트 워크플로우만 실행 가능
 
 ## 워크플로우
 

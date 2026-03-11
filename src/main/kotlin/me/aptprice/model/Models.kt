@@ -24,7 +24,6 @@ data class Listing(
     val areaSupplySqm: Double = 0.0, // 공급면적
     val areaExclusiveSqm: Double = areaSqm, // 전용면적
     val pyeong: Int,
-    val hsehCnt: Int, // 총 세대수
     val url: String,
     val updatedAt: String = LocalDateTime.now().toString(),
     val firstSeenAt: String = updatedAt,

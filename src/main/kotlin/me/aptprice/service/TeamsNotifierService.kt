@@ -263,9 +263,6 @@ class TeamsNotifierService(
         val exclusiveSqm = if (listing.areaExclusiveSqm > 0) listing.areaExclusiveSqm else listing.areaSqm
         val detailParts = mutableListOf<String>()
 
-        if (listing.hsehCnt > 0) {
-            detailParts.add("${listing.hsehCnt}세대")
-        }
         if (supplySqm > 0 || exclusiveSqm > 0) {
             detailParts.add("공급/전용 ${formatArea(supplySqm)}/${formatArea(exclusiveSqm)}㎡")
         }

@@ -226,15 +226,9 @@ class NaverService(private val objectMapper: ObjectMapper) {
             val hscpNo = node.get("hscpNo").textOrEmpty().trim()
             val hscpNm = node.get("hscpNm").textOrEmpty().trim()
             val hscpTypeCd = node.get("hscpTypeCd").textOrEmpty().trim()
-            val householdCount = firstPositive(
-                parseHouseholdCount(node.get("hsehCnt")),
-                parseHouseholdCount(node.get("totHsehCnt")),
-                parseHouseholdCount(node.get("totHhldCnt")),
-                parseHouseholdCount(node.get("hhldCnt"))
-            )
             if (hscpNo.isBlank() || hscpNm.isBlank()) return@mapNotNull null
             if (hscpTypeCd != "A01") return@mapNotNull null // 아파트만 수집
-            ComplexInfo(hscpNo = hscpNo, hscpNm = hscpNm, hsehCnt = householdCount)
+            ComplexInfo(hscpNo = hscpNo, hscpNm = hscpNm)
         }
     }
 
@@ -412,13 +406,6 @@ class NaverService(private val objectMapper: ObjectMapper) {
         val priceText = node.get("prcInfo").textOrEmpty()
         val parsedPrice = parsePrice(priceText)
         if (parsedPrice <= 0L) return null
-        val householdCount = firstPositive(
-            parseHouseholdCount(node.get("hsehCnt")),
-            parseHouseholdCount(node.get("totHsehCnt")),
-            parseHouseholdCount(node.get("totHhldCnt")),
-            parseHouseholdCount(node.get("hhldCnt")),
-            complex.hsehCnt
-        )
 
         val title = node.get("atclNm").textOrEmpty().trim().ifBlank { complex.hscpNm }
         val featureDesc = node.get("atclFetrDesc").textOrEmpty().trim()
@@ -442,7 +429,6 @@ class NaverService(private val objectMapper: ObjectMapper) {
             areaSupplySqm = areaSupplySqm,
             areaExclusiveSqm = areaExclusiveSqm,
             pyeong = if (pyeongBaseSqm > 0.0) (pyeongBaseSqm / 3.3058).roundToInt() else 0,
-            hsehCnt = householdCount,
             url = "https://fin.land.naver.com/articles/$articleNo"
         )
     }
@@ -548,15 +534,6 @@ class NaverService(private val objectMapper: ObjectMapper) {
         } else clean.toLongOrNull() ?: 0L
     }
 
-    private fun parseHouseholdCount(node: JsonNode?): Int {
-        if (node == null || node.isNull) return 0
-        val value = when {
-            node.isNumber -> node.asInt(0)
-            else -> node.textOrEmpty().replace(",", "").trim().toIntOrNull() ?: 0
-        }
-        return value.coerceAtLeast(0)
-    }
-
     private fun JsonNode?.textOrEmpty(): String {
         if (this == null || this.isNull) return ""
         return this.asString("")
@@ -581,9 +558,6 @@ class NaverService(private val objectMapper: ObjectMapper) {
             if (text.isBlank()) null else text
         }.distinct()
     }
-
-    private fun firstPositive(vararg values: Int): Int =
-        values.firstOrNull { it > 0 } ?: 0
 
     private fun firstPositiveArea(vararg values: Double): Double =
         values.firstOrNull { it > 0.0 } ?: 0.0
@@ -637,8 +611,7 @@ class NaverService(private val objectMapper: ObjectMapper) {
 
     private data class ComplexInfo(
         val hscpNo: String,
-        val hscpNm: String,
-        val hsehCnt: Int = 0
+        val hscpNm: String
     )
 
     private data class ArticleFetchResult(

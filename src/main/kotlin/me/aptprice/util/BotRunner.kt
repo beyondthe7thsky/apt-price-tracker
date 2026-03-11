@@ -539,7 +539,6 @@ class BotRunner(
         }
         val statusChangedAt = if (nextStatus != old.status) now else old.statusChangedAt
         val normalizedFirstSeenAt = old.firstSeenAt.ifBlank { old.updatedAt }
-        val normalizedHsehCnt = if (fresh.hsehCnt > 0) fresh.hsehCnt else old.hsehCnt
         val normalizedBuildingName = fresh.buildingName.ifBlank { old.buildingName }
         val normalizedFeatureDesc = fresh.featureDesc.ifBlank { old.featureDesc }
         val normalizedTagList = fresh.tagList.ifEmpty { old.tagList }
@@ -548,7 +547,6 @@ class BotRunner(
             updatedAt = now,
             firstSeenAt = normalizedFirstSeenAt,
             lastSeenAt = now,
-            hsehCnt = normalizedHsehCnt,
             buildingName = normalizedBuildingName,
             featureDesc = normalizedFeatureDesc,
             tagList = normalizedTagList,
