@@ -22,6 +22,7 @@ on:
           - "6) 서울 동부/서북권"
           - "7) 성남 전역"
           - "8) 안양권"
+          - "9) 서울 강남3구"
       max_regions_per_run:
         description: "수동 실행 시 수집할 최대 동 수 (기본 0=전체 실행)"
         required: false
@@ -39,7 +40,7 @@ on:
         required: false
         default: "0"
       commit_data:
-        description: "data/apt-listings.json 변경분 자동 커밋 여부"
+        description: "data/apt-listings*.json 변경분 자동 커밋 여부"
         required: false
         default: "true"
         type: choice
@@ -52,7 +53,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        region_shard: ${{ fromJSON(github.event_name == 'schedule' && '[1,2,3,4,5,6,7,8]' || '[1]') }}
+        region_shard: ${{ fromJSON(github.event_name == 'schedule' && '[1,2,3,4,5,6,7,8,9]' || '[1]') }}
     runs-on: [self-hosted, macOS, ARM64]
     permissions:
       contents: write
@@ -102,7 +103,7 @@ jobs:
             run_shard="$(echo "${run_scope}" | sed -E 's/^([0-9]+).*/\1/')"
           fi
 
-          if ! [[ "${run_shard}" =~ ^[1-8]$ ]]; then
+          if ! [[ "${run_shard}" =~ ^[1-9]$ ]]; then
             run_shard="1"
           fi
 
@@ -115,6 +116,7 @@ jobs:
             6) run_scope_label="서울 동부/서북권" ;;
             7) run_scope_label="성남 전역" ;;
             8) run_scope_label="안양권" ;;
+            9) run_scope_label="서울 강남3구" ;;
             *) run_scope_label="수원시 (영통구, 광교, 화서)" ;;
           esac
 

@@ -21,7 +21,9 @@ def region_group_by_index(index: int) -> int:
         return 6
     if 70 <= index <= 113:
         return 7
-    return 8
+    if 114 <= index <= 118:
+        return 8
+    return 9
 
 
 def load_region_order(bot_runner_path: Path) -> list[str]:
@@ -65,7 +67,7 @@ def split_listings(input_path: Path, output_dir: Path, bot_runner_path: Path) ->
         )
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    for shard in range(1, 9):
+    for shard in range(1, 10):
         out_path = output_dir / f"apt-listings-s{shard}.json"
         out_path.write_text(
             json.dumps(shards.get(shard, []), ensure_ascii=False, separators=(",", ":")),
@@ -74,7 +76,7 @@ def split_listings(input_path: Path, output_dir: Path, bot_runner_path: Path) ->
 
     total = sum(len(v) for v in shards.values())
     print(f"split complete: total={total}, input={len(payload)}")
-    for shard in range(1, 9):
+    for shard in range(1, 10):
         print(f"  s{shard}: {len(shards.get(shard, []))}")
     return total
 
@@ -91,7 +93,7 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         default="data",
-        help="Output directory for apt-listings-s1..s8.json",
+        help="Output directory for apt-listings-s1..s9.json",
     )
     parser.add_argument(
         "--bot-runner",

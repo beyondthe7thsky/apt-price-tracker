@@ -178,10 +178,51 @@ class BotRunner(
             mapOf("name" to "안양_비산동", "code" to "4117310100"),
             mapOf("name" to "안양_관양동", "code" to "4117310200"),
             mapOf("name" to "안양_평촌동", "code" to "4117310300"),
-            mapOf("name" to "안양_호계동", "code" to "4117310400")
+            mapOf("name" to "안양_호계동", "code" to "4117310400"),
+
+            // 9) 서울 강남3구 (강남/서초/송파)
+            mapOf("name" to "서울강남_역삼동", "code" to "1168010100"),
+            mapOf("name" to "서울강남_개포동", "code" to "1168010300"),
+            mapOf("name" to "서울강남_청담동", "code" to "1168010400"),
+            mapOf("name" to "서울강남_삼성동", "code" to "1168010500"),
+            mapOf("name" to "서울강남_대치동", "code" to "1168010600"),
+            mapOf("name" to "서울강남_신사동", "code" to "1168010700"),
+            mapOf("name" to "서울강남_논현동", "code" to "1168010800"),
+            mapOf("name" to "서울강남_압구정동", "code" to "1168011000"),
+            mapOf("name" to "서울강남_세곡동", "code" to "1168011100"),
+            mapOf("name" to "서울강남_자곡동", "code" to "1168011200"),
+            mapOf("name" to "서울강남_율현동", "code" to "1168011300"),
+            mapOf("name" to "서울강남_일원동", "code" to "1168011400"),
+            mapOf("name" to "서울강남_수서동", "code" to "1168011500"),
+            mapOf("name" to "서울강남_도곡동", "code" to "1168011800"),
+
+            mapOf("name" to "서울서초_방배동", "code" to "1165010100"),
+            mapOf("name" to "서울서초_양재동", "code" to "1165010200"),
+            mapOf("name" to "서울서초_우면동", "code" to "1165010300"),
+            mapOf("name" to "서울서초_원지동", "code" to "1165010400"),
+            mapOf("name" to "서울서초_잠원동", "code" to "1165010600"),
+            mapOf("name" to "서울서초_반포동", "code" to "1165010700"),
+            mapOf("name" to "서울서초_서초동", "code" to "1165010800"),
+            mapOf("name" to "서울서초_내곡동", "code" to "1165010900"),
+            mapOf("name" to "서울서초_염곡동", "code" to "1165011000"),
+            mapOf("name" to "서울서초_신원동", "code" to "1165011100"),
+
+            mapOf("name" to "서울송파_잠실동", "code" to "1171010100"),
+            mapOf("name" to "서울송파_신천동", "code" to "1171010200"),
+            mapOf("name" to "서울송파_풍납동", "code" to "1171010300"),
+            mapOf("name" to "서울송파_송파동", "code" to "1171010400"),
+            mapOf("name" to "서울송파_석촌동", "code" to "1171010500"),
+            mapOf("name" to "서울송파_삼전동", "code" to "1171010600"),
+            mapOf("name" to "서울송파_가락동", "code" to "1171010700"),
+            mapOf("name" to "서울송파_문정동", "code" to "1171010800"),
+            mapOf("name" to "서울송파_장지동", "code" to "1171010900"),
+            mapOf("name" to "서울송파_방이동", "code" to "1171011100"),
+            mapOf("name" to "서울송파_오금동", "code" to "1171011200"),
+            mapOf("name" to "서울송파_거여동", "code" to "1171011300"),
+            mapOf("name" to "서울송파_마천동", "code" to "1171011400")
         )
 
-        val normalizedRegionShard = if (regionShard in 1..8) regionShard else 0
+        val normalizedRegionShard = if (regionShard in 1..9) regionShard else 0
         val shardTargetRegions = targetRegions.filterIndexed { index, _ ->
             normalizedRegionShard == 0 || regionGroupByIndex(index) == normalizedRegionShard
         }
@@ -516,7 +557,8 @@ class BotRunner(
         in 30..37 -> 5
         in 38..69 -> 6
         in 70..113 -> 7
-        else -> 8
+        in 114..118 -> 8
+        else -> 9
     }
 
     private fun mergeSeenListing(old: Listing?, fresh: Listing, now: String): Listing {
