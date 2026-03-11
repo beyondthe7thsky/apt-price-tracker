@@ -2,11 +2,9 @@
 
 네이버 모바일 부동산(`m.land.naver.com`) 매물을 수집하고, GitHub Pages 리포트/Teams 알림으로 공유하는 배치 프로젝트입니다.
 
-![오늘의 아파트 매물 리포트](docs/images/dashboard-report.svg)
-
 ## 라이브 리포트
 
-- [https://saechimdaeki.github.io/apt-price-tracker/](https://saechimdaeki.github.io/apt-price-tracker/)
+<img width="1288" height="884" alt="image" src="https://github.com/user-attachments/assets/3ab270cc-ce3d-46da-bb30-17b237fee292" />
 
 ## 현재 수집 범위
 
