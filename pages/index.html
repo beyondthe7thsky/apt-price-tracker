@@ -5,38 +5,548 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>APT Listings Report</title>
   <style>
-    :root{--bg:#f5f8fc;--line:#dbe3ee;--text:#1f2937;--muted:#64748b;--card:#fff;--shadow:0 10px 24px rgba(31,41,55,.06)}
+    :root {
+      --bg: #edf3fb;
+      --line: #d7e2f0;
+      --line-strong: #c5d4e8;
+      --text: #0f172a;
+      --muted: #64748b;
+      --card: #ffffff;
+      --card-soft: #f8fbff;
+      --brand: #0f172a;
+      --shadow: 0 10px 28px rgba(30, 41, 59, .08);
+      --glow-a: rgba(37,99,235,.24);
+      --glow-b: rgba(34,197,94,.20);
+      --hero-a: #0f4a8a;
+      --hero-b: #0ea5a1;
+    }
     *{box-sizing:border-box}
-    body{margin:0;padding:24px;color:var(--text);background:radial-gradient(circle at 20% -10%,#dbeafe 0,transparent 36%),radial-gradient(circle at 90% 0%,#dcfce7 0,transparent 34%),var(--bg);font-family:"Pretendard","Apple SD Gothic Neo","Segoe UI",sans-serif}
-    .wrap{max-width:1820px;margin:0 auto}
-    h1{margin:0 0 6px;font-size:30px;letter-spacing:-.02em}
-    .meta{color:var(--muted);margin:0 0 14px}
-    .legend{margin:-6px 0 14px;padding:10px 12px;border:1px solid #d8e2f0;border-radius:10px;background:#f8fbff;color:#334155;font-size:13px}
-    .toolbar{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;box-shadow:var(--shadow)}
-    .toolbar input,.toolbar select,.toolbar button{border:1px solid #cfd8e6;border-radius:10px;padding:10px 12px;font-size:14px;background:#fff}
-    .toolbar button{cursor:pointer;background:#0f172a;color:#fff;border-color:#0f172a;font-weight:700}
-    .stats{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;margin:14px 0}
-    .stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;box-shadow:var(--shadow)}
-    .stat .k{font-size:12px;color:var(--muted)} .stat .v{font-size:20px;font-weight:800}
-    .region{--accent:#475569;background:var(--card);border:1px solid var(--line);border-left:6px solid var(--accent);border-radius:14px;margin-bottom:12px;overflow:hidden;box-shadow:var(--shadow)}
-    .head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 13px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,rgba(15,23,42,.03),transparent 60%);cursor:pointer}
-    .head:hover{background:linear-gradient(90deg,rgba(15,23,42,.06),transparent 60%)}
+
+    body {
+      margin: 0;
+      padding: 24px;
+      color: var(--text);
+      background: radial-gradient(circle at 18% -12%, #dbeafe 0, transparent 36%),
+      radial-gradient(circle at 92% 2%, #dcfce7 0, transparent 33%),
+      linear-gradient(180deg, #f7fbff 0%, var(--bg) 38%, #e8f0fa 100%),
+      repeating-linear-gradient(135deg, rgba(15,23,42,.015) 0 1px, transparent 1px 12px),
+      conic-gradient(from 200deg at 8% 88%, rgba(2,132,199,.08), transparent 28%, rgba(16,185,129,.08) 52%, transparent 76%);
+      font-family: "Pretendard", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+    }
+
+    .wrap {
+      max-width: 1780px;
+      margin: 0 auto;
+      position: relative
+    }
+
+    .wrap::before {
+      content: "";
+      position: fixed;
+      right: -140px;
+      bottom: -120px;
+      width: 340px;
+      height: 340px;
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--glow-a) 0%, rgba(37,99,235,0) 70%);
+      pointer-events: none;
+      z-index: -1
+    }
+
+    .top-banner {
+      border: 1px solid #cfe0f5;
+      border-radius: 24px;
+      background: linear-gradient(120deg, rgba(255,255,255,.98) 0%, rgba(239,247,255,.95) 48%, rgba(235,252,246,.93) 100%);
+      box-shadow: 0 20px 44px rgba(15,23,42,.14);
+      padding: 20px 20px 16px;
+      margin-bottom: 14px;
+      position: relative;
+      overflow: hidden
+    }
+
+    .top-banner::before {
+      content: "";
+      position: absolute;
+      left: -90px;
+      top: -120px;
+      width: 240px;
+      height: 240px;
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--glow-b) 0%, rgba(34,197,94,0) 72%);
+      pointer-events: none
+    }
+    .top-banner::after {
+      content: "";
+      position: absolute;
+      right: -120px;
+      top: -110px;
+      width: 280px;
+      height: 280px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(14,165,233,.22) 0%, rgba(14,165,233,0) 72%);
+      pointer-events: none
+    }
+
+    .title-row {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      position: relative
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 44px;
+      letter-spacing: -.03em;
+      font-weight: 900;
+      background: linear-gradient(120deg,#0f172a 0%, var(--hero-a) 40%, var(--hero-b) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: inline-block
+    }
+
+    .meta {
+      color: #1e3a5f;
+      margin: 0 0 14px;
+      font-weight: 800;
+      background: rgba(255,255,255,.72);
+      border: 1px solid #c9dbf2;
+      border-radius: 999px;
+      padding: 9px 14px;
+      display: inline-flex;
+      gap: 8px;
+      backdrop-filter: blur(6px);
+      box-shadow: 0 8px 18px rgba(30,58,95,.10)
+    }
+
+    .legend {
+      margin: 6px 0 0;
+      padding: 12px 14px;
+      border: 1px solid #d3e4f6;
+      border-left: 6px solid #0ea5a1;
+      border-radius: 12px;
+      background: linear-gradient(90deg,#f1faf8 0%,#f4f9ff 48%,#fffef8 100%);
+      color: #334155;
+      font-size: 13px;
+      font-weight: 700
+    }
+
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 10px 0 14px;
+      padding: 14px;
+      background: linear-gradient(180deg, rgba(248,251,255,.92) 0%, rgba(242,247,255,.92) 100%);
+      border: 1px solid var(--line-strong);
+      border-radius: 20px;
+      box-shadow: 0 16px 36px rgba(15,23,42,.10);
+      position: relative;
+      overflow: hidden;
+      backdrop-filter: blur(10px);
+      position: sticky;
+      top: 12px;
+      z-index: 40;
+    }
+    .controls:hover {
+      box-shadow: 0 20px 44px rgba(30,41,59,.18)
+    }
+    .controls::after {
+      content: "";
+      position: absolute;
+      right: -80px;
+      top: -80px;
+      width: 220px;
+      height: 220px;
+      background: radial-gradient(circle,#dbeafe 0%,transparent 70%);
+      pointer-events: none
+    }
+
+    .hidden-state {
+      display: none
+    }
+
+    .quick-grid {
+      display: grid;
+      grid-template-columns:1fr 1fr;
+      gap: 12px
+    }
+
+    .quick-card {
+      background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, .06);
+      position: relative;
+      overflow: hidden;
+      transition: transform .16s ease, box-shadow .16s ease
+    }
+    .quick-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 18px 34px rgba(15,23,42,.14)
+    }
+    .quick-card::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 3px;
+      background: linear-gradient(90deg,#2563eb 0%,#0ea5e9 48%,#22c55e 100%)
+    }
+    .quick-card::after {
+      content: "";
+      position: absolute;
+      right: -20px;
+      bottom: -36px;
+      width: 120px;
+      height: 120px;
+      background: radial-gradient(circle, rgba(14,165,233,.18) 0%, rgba(14,165,233,0) 72%);
+      pointer-events: none
+    }
+    .quick-card:nth-child(1){
+      background: linear-gradient(180deg,#ffffff 0%,#f2f7ff 100%);
+      border-color:#cfe0fa;
+    }
+    .quick-card:nth-child(2){
+      background: linear-gradient(180deg,#ffffff 0%,#effcf6 100%);
+      border-color:#cdebdc;
+    }
+
+    .filter-panel {
+      background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, .06);
+      position: relative;
+      overflow: hidden
+    }
+    .filter-panel::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 3px;
+      background: linear-gradient(90deg,#0f172a 0%,#334155 52%,#64748b 100%)
+    }
+
+    .filter-title {
+      font-size: 12px;
+      color: #64748b;
+      font-weight: 700;
+      margin-bottom: 8px
+    }
+
+    .filter-row {
+      display: grid;
+      grid-template-columns:repeat(4, minmax(0, 1fr)) 1.4fr 130px;
+      gap: 8px
+    }
+
+    .filter-row input, .filter-row select, .filter-row button {
+      border: 1px solid #cfd8e6;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+      background: linear-gradient(180deg,#fff 0%,#fdfefe 100%);
+      box-shadow: 0 1px 0 rgba(15,23,42,.02) inset;
+    }
+    .filter-row input:focus, .filter-row select:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59,130,246,.15)
+    }
+
+    .filter-row button {
+      cursor: pointer;
+      background: var(--brand);
+      color: #fff;
+      border-color: var(--brand);
+      font-weight: 700;
+      transition: transform .12s ease, box-shadow .12s ease;
+    }
+
+    .filter-row button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 14px rgba(15, 23, 42, .2)
+    }
+
+    #city, #region {
+      display: none !important;
+      position: absolute !important;
+      width: 1px !important;
+      height: 1px !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+      z-index: -1 !important;
+    }
+
+    .city-quick, .region-quick {
+      display: block
+    }
+
+    .city-quick-title, .region-quick-title {
+      font-size: 12px;
+      color: #64748b;
+      font-weight: 700;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px
+    }
+    .quick-count {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid #c7d5e8;
+      background: #f5f9ff;
+      color: #1e3a8a;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 800
+    }
+
+    .city-quick-list, .region-quick-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding-right: 2px;
+      overflow-x: hidden
+    }
+
+    .city-quick-list {
+      max-height: none;
+      overflow-y: visible
+    }
+
+    .region-quick-list {
+      max-height: none;
+      overflow-y: visible
+    }
+
+    .city-chip, .region-chip {
+      border: 1px solid #c7d5e8;
+      border-radius: 999px;
+      padding: 8px 13px;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+      color: #334155;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all .14s ease;
+      box-shadow: 0 1px 0 rgba(255,255,255,.9) inset;
+    }
+
+    .city-chip:hover, .region-chip:hover {
+      background: #eef5ff;
+      border-color: #8fb0d8;
+      transform: translateY(-2px) scale(1.02);
+      box-shadow: 0 12px 20px rgba(37,99,235,.14)
+    }
+
+    .city-chip.active,
+    .region-chip.active {
+      background: linear-gradient(120deg,#0f172a 0%,#1d4ed8 58%,#0ea5a1 100%);
+      border-color: #0f172a;
+      color: #fff;
+      box-shadow: 0 12px 22px rgba(15, 23, 42, .30)
+    }
+    .active-filters{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      padding:10px 12px;
+      border:1px dashed #b9cbe3;
+      border-radius:12px;
+      background:linear-gradient(90deg,#f8fbff 0%,#f3f8ff 60%,#f6fffb 100%)
+    }
+    .af-title{
+      font-size:12px;
+      font-weight:800;
+      color:#334155;
+      white-space:nowrap
+    }
+    .af-list{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      flex:1
+    }
+    .af-chip{
+      border:1px solid #bfd0e6;
+      border-radius:999px;
+      background:#fff;
+      color:#0f172a;
+      font-size:12px;
+      font-weight:700;
+      padding:5px 10px;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      cursor:pointer;
+      transition:all .12s ease
+    }
+    .af-chip:hover{
+      background:#eff6ff;
+      border-color:#8fb0d8;
+      transform:translateY(-1px)
+    }
+    .af-chip .x{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      width:16px;
+      height:16px;
+      border-radius:999px;
+      background:#e2e8f0;
+      color:#334155;
+      font-size:11px;
+      line-height:1
+    }
+    .af-clear-all{
+      border:1px solid #0f172a;
+      background:#0f172a;
+      color:#fff;
+      border-radius:999px;
+      padding:6px 10px;
+      font-size:12px;
+      font-weight:800;
+      cursor:pointer
+    }
+    .af-clear-all:hover{filter:brightness(1.05)}
+
+    .city-quick-list::-webkit-scrollbar, .region-quick-list::-webkit-scrollbar {
+      height: 8px;
+      width: 8px
+    }
+
+    .city-quick-list::-webkit-scrollbar-thumb, .region-quick-list::-webkit-scrollbar-thumb {
+      background: #c7d4e6;
+      border-radius: 999px
+    }
+
+    .city-quick-list::-webkit-scrollbar-track, .region-quick-list::-webkit-scrollbar-track {
+      background: #eff5fc;
+      border-radius: 999px
+    }
+    .stats{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;margin:14px 0;perspective:1000px}
+
+    .stat {
+      background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      box-shadow: 0 10px 24px rgba(15,23,42,.08);
+      position: relative;
+      overflow: hidden;
+      transition: transform .15s ease, box-shadow .15s ease
+    }
+    .stat:hover{transform:translateY(-2px);box-shadow:0 14px 28px rgba(15,23,42,.12)}
+    .stat::before{
+      content:"";
+      position:absolute;
+      left:0;
+      top:0;
+      width:100%;
+      height:3px;
+      background:linear-gradient(90deg,#1d4ed8 0%,#0ea5e9 60%,#22c55e 100%)
+    }
+    .stat:nth-child(2)::before{background:linear-gradient(90deg,#2563eb 0%,#14b8a6 100%)}
+    .stat:nth-child(3)::before{background:linear-gradient(90deg,#e11d48 0%,#f97316 100%)}
+    .stat:nth-child(4)::before{background:linear-gradient(90deg,#0ea5a4 0%,#06b6d4 100%)}
+    .stat:nth-child(5)::before{background:linear-gradient(90deg,#6366f1 0%,#22c55e 100%)}
+    .stat:nth-child(6)::before{background:linear-gradient(90deg,#f59e0b 0%,#f97316 100%)}
+    .stat:nth-child(7)::before{background:linear-gradient(90deg,#475569 0%,#0f172a 100%)}
+    .stat .k{font-size:12px;color:#64748b;font-weight:700}
+    .stat .v{font-size:32px;line-height:1.05;font-weight:900;letter-spacing:-.02em}
+    .stat:nth-child(1) .v{color:#0f172a}
+    .stat:nth-child(2) .v{color:#1d4ed8}
+    .stat:nth-child(3) .v{color:#dc2626}
+    .stat:nth-child(4) .v{color:#0e7490}
+    .stat:nth-child(5) .v{color:#0891b2}
+    .stat:nth-child(6) .v{color:#b45309}
+    .stat:nth-child(7) .v{color:#374151}
+    .region{
+      --accent:#475569;
+      background:var(--card);
+      border:1px solid #d8e3f2;
+      border-left:6px solid var(--accent);
+      border-radius:18px;
+      margin-bottom:14px;
+      overflow:hidden;
+      box-shadow:0 14px 30px rgba(15,23,42,.10);
+      animation: regionIn .28s ease both;
+      animation-delay: var(--delay,0ms)
+    }
+    @keyframes regionIn{
+      from{opacity:0;transform:translateY(8px)}
+      to{opacity:1;transform:translateY(0)}
+    }
+    .head{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      padding:12px 14px;
+      border-bottom:1px solid var(--line);
+      background:linear-gradient(90deg,rgba(37,99,235,.14) 0%,rgba(255,255,255,.98) 64%);
+      cursor:pointer
+    }
+    .head:hover{background:linear-gradient(90deg,rgba(37,99,235,.22) 0%,rgba(255,255,255,1) 66%)}
     .head:focus-visible{outline:2px solid #2563eb;outline-offset:-2px}
     .title-wrap{display:flex;align-items:center;gap:8px}
     .collapse-caret{display:inline-flex;width:18px;justify-content:center;color:#334155;font-weight:900}
     .collapse-label{font-size:12px;color:#64748b;font-weight:700}
     .region.collapsed .head{border-bottom:0}
-    .title{font-size:18px;font-weight:800}
+    .title{font-size:20px;font-weight:900;letter-spacing:-.02em}
     .chips{display:flex;gap:6px;flex-wrap:wrap}
     .chip{padding:3px 8px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid}
     .chip.city{background:rgba(15,23,42,.06);color:#0f172a;border-color:rgba(15,23,42,.12)}
     .chip.s-bargain{background:#ffe4e6;color:#9f1239;border-color:#fecdd3}
     .chip.s-cheap{background:#ecfeff;color:#155e75;border-color:#a5f3fc}
     .chip.s-normal{background:#f8fafc;color:#475569;border-color:#cbd5e1}
-    .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+    .table-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      background: linear-gradient(180deg,#ffffff 0%,#fbfdff 100%);
+      border-top: 1px solid #e4ecf8
+    }
     table{width:100%;min-width:1520px;border-collapse:collapse;font-size:13px}
     th,td{border-bottom:1px solid #edf1f7;padding:8px 10px;text-align:left;vertical-align:top}
-    th{background:#f8fafc;color:#475569;position:sticky;top:0;z-index:2}
+
+    th {
+      background: linear-gradient(180deg,#edf5ff 0%,#e8f1ff 100%);
+      color: #334155;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      font-weight: 800;
+      backdrop-filter: blur(3px)
+    }
+    @media (min-width:901px){
+      th:first-child{
+        left:0;
+        z-index:3;
+        box-shadow: 1px 0 0 #dbe7f7;
+      }
+      td:first-child{
+        position:sticky;
+        left:0;
+        z-index:1;
+        background:#fff;
+        box-shadow: 1px 0 0 #eef3fb;
+      }
+      tbody tr:nth-child(even) td:first-child{background:#f9fbff}
+      tbody tr:hover td:first-child{background:#eaf3ff}
+    }
     th.sortable{cursor:pointer;user-select:none}
     th.sortable .sort-indicator{margin-left:4px;color:#94a3b8;font-size:11px;font-weight:700}
     th.sortable.active .sort-indicator{color:#0f172a}
@@ -58,21 +568,80 @@
     .diff-pos{color:#dc2626;font-weight:700}
     .region-footer{display:flex;justify-content:center;padding:12px;border-top:1px solid var(--line);background:#fbfdff}
     .load-more{border:1px solid #94a3b8;border-radius:10px;padding:7px 12px;background:#fff;color:#334155;font-weight:700;cursor:pointer}
-    .load-more:hover{background:#f1f5f9}
+    .load-more:hover{background:#eef5ff;border-color:#7293c8}
     .list-footer{display:flex;justify-content:center;padding:10px 0 16px}
     .hint{font-size:12px;color:#64748b;text-align:center;margin-top:6px}
+
+    tbody tr:nth-child(even) {
+      background: #f9fbff
+    }
+
+    tbody tr:hover {
+      background: #e7f1ff
+    }
     .empty{background:#fff;border:1px dashed #cbd5e1;border-radius:12px;padding:24px;color:#64748b;text-align:center}
     a{color:#1f6feb;text-decoration:none} a:hover{text-decoration:underline}
-    @media (max-width:1536px){.toolbar{grid-template-columns:repeat(4,minmax(0,1fr))}.stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+    @media (max-width: 1536px) {
+      .filter-row {
+        grid-template-columns:repeat(3, minmax(0, 1fr))
+      }
+
+      .stats {
+        grid-template-columns:repeat(3, minmax(0, 1fr))
+      }
+    }
     @media (max-width:900px){
       body{padding:12px}
-      h1{font-size:24px}
+      h1{font-size:30px}
       .meta{font-size:13px}
       .legend{font-size:12px}
-      .toolbar{grid-template-columns:1fr;padding:10px}
+
+      .top-banner{
+        padding:14px 12px 10px;
+        border-radius:18px;
+        margin-bottom:10px
+      }
+      .title-row{
+        align-items:flex-start
+      }
+      .controls {
+        padding: 10px;
+        position: static;
+        top: auto
+      }
+
+      .quick-grid {
+        grid-template-columns:1fr
+      }
+
+      .filter-row {
+        grid-template-columns:1fr
+      }
+
+      .city-quick-list {
+        max-height: 122px;
+        overflow-y: auto
+      }
+
+      .region-quick-list {
+        max-height: 168px;
+        overflow-y: auto
+      }
+      .active-filters{
+        padding:8px;
+        gap:8px
+      }
+      .af-title{
+        width:100%
+      }
+      .af-clear-all{
+        width:100%;
+        border-radius:10px
+      }
       .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
       .stat{padding:10px}
-      .stat .v{font-size:18px}
+      .stat .v{font-size:22px}
       .head{flex-direction:column;align-items:flex-start}
       .title-wrap{width:100%}
       .table-wrap{overflow-x:visible}
@@ -91,19 +660,59 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>오늘의 아파트 매물 리포트</h1>
-    <div class="meta">기준시각: 2026-03-11 12:21 KST / 노출 매물 23133건 / 필터: 없음</div>
-    <div class="legend">평균대비 = (매물가 - 단지평균가) / 단지평균가 × 100 · 급매: -10.0% 이하 · 저렴: -5.0% 이하</div>
+    <section class="top-banner">
+      <div class="title-row">
+        <h1>오늘의 아파트 매물 리포트</h1>
+        <div class="meta">기준시각: 2026-03-11 13:15 KST / 노출 매물 23133건 / 필터: 없음</div>
+      </div>
+      <div class="legend">평균대비 = (매물가 - 단지평균가) / 단지평균가 × 100 · 급매: -10.0% 이하 · 저렴: -5.0% 이하</div>
+    </section>
 
-    <div class="toolbar">
-      <select id="city"></select>
-      <select id="region"></select>
-      <select id="priceBand"><option value="">가격대(전체)</option><option>8억 미만</option><option>8~9억대</option><option>9~10억대</option><option>10~12억대</option><option>12억 이상</option></select>
-      <select id="pyeongBand"><option value="">평형(공급면적 기준,전체)</option><option>20평대</option><option>30평대</option></select>
-      <select id="signal"><option value="">판단(전체)</option><option>급매</option><option>저렴</option><option>보통</option></select>
-      <select id="status"><option value="">상태(전체)</option><option>판매중</option><option>다시 등록된 매물(판매중)</option></select>
-      <input id="q" placeholder="지역/단지명 검색"/>
-      <button id="resetBtn">필터 초기화</button>
+    <div class="controls">
+      <div class="hidden-state">
+        <select id="city" hidden aria-hidden="true" tabindex="-1"></select>
+        <select id="region" hidden aria-hidden="true" tabindex="-1"></select>
+      </div>
+      <div class="quick-grid">
+        <section class="quick-card">
+          <div id="cityQuick" class="city-quick"></div>
+        </section>
+        <section class="quick-card">
+          <div id="regionQuick" class="region-quick"></div>
+        </section>
+      </div>
+      <section class="filter-panel">
+        <div class="filter-title">상세 필터</div>
+        <div class="filter-row">
+          <select id="priceBand">
+            <option value="">가격대(전체)</option>
+            <option>8억 미만</option>
+            <option>8~9억대</option>
+            <option>9~10억대</option>
+            <option>10~12억대</option>
+            <option>12억 이상</option>
+          </select>
+          <select id="pyeongBand">
+            <option value="">평형(공급면적 기준,전체)</option>
+            <option>20평대</option>
+            <option>30평대</option>
+          </select>
+          <select id="signal">
+            <option value="">판단(전체)</option>
+            <option>급매</option>
+            <option>저렴</option>
+            <option>보통</option>
+          </select>
+          <select id="status">
+            <option value="">상태(전체)</option>
+            <option>판매중</option>
+            <option>다시 등록된 매물(판매중)</option>
+          </select>
+          <input id="q" placeholder="지역/단지명 검색"/>
+          <button id="resetBtn">필터 초기화</button>
+        </div>
+      </section>
+      <div id="activeFilterBar" class="active-filters" hidden></div>
     </div>
 
     <div class="stats">
@@ -122,8 +731,21 @@
   <script>
     let RAW = [];
     const DATA_URL = 'report-data.json';
-    const cityEl=document.getElementById('city'),regionEl=document.getElementById('region'),priceEl=document.getElementById('priceBand'),pyeongEl=document.getElementById('pyeongBand'),signalEl=document.getElementById('signal'),statusEl=document.getElementById('status'),qEl=document.getElementById('q'),regionsEl=document.getElementById('regions');
+    const cityEl = document.getElementById('city'), regionEl = document.getElementById('region'),
+            priceEl = document.getElementById('priceBand'), pyeongEl = document.getElementById('pyeongBand'),
+            signalEl = document.getElementById('signal'), statusEl = document.getElementById('status'),
+            qEl = document.getElementById('q'), regionsEl = document.getElementById('regions'),
+            cityQuickEl = document.getElementById('cityQuick'), regionQuickEl = document.getElementById('regionQuick');
+    const activeFilterBar = document.getElementById('activeFilterBar');
     const resetBtn=document.getElementById('resetBtn');
+    cityEl.hidden = true;
+    cityEl.setAttribute('aria-hidden', 'true');
+    cityEl.tabIndex = -1;
+    cityEl.style.display = 'none';
+    regionEl.hidden = true;
+    regionEl.setAttribute('aria-hidden', 'true');
+    regionEl.tabIndex = -1;
+    regionEl.style.display = 'none';
     const sTotal=document.getElementById('sTotal'),sRegions=document.getElementById('sRegions'),sBargain=document.getElementById('sBargain'),sCheap=document.getElementById('sCheap');
     const CITY_COLOR={"수원":"#2563eb","용인수지":"#0f766e","서울양천":"#9333ea","서울강서":"#0284c7","서울영등포":"#0891b2","서울동작":"#dc2626","서울관악":"#ea580c","서울구로":"#16a34a","서울금천":"#ca8a04","서울성동":"#4f46e5","서울마포":"#7c3aed","서울용산":"#be123c","서울은평":"#0d9488","서울강동":"#1d4ed8","서울동대문":"#c2410c","서울광진":"#7e22ce","서울서대문":"#0f766e","서울성북":"#475569","서울강남":"#7c2d12","서울서초":"#b45309","서울송파":"#0f766e","성남판교":"#0f766e","성남분당":"#2563eb","성남수정":"#be123c","성남중원":"#0891b2","안양":"#ea580c"};
     const SORT_DEFAULT={key:'price',dir:'asc'};
@@ -139,15 +761,131 @@
     let visibleRegionBlocks=REGION_INITIAL_BLOCKS;
     const esc=(s)=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
     const uniq=(a)=>Array.from(new Set(a)).sort((x,y)=>String(x).localeCompare(String(y),'ko'));
+    const selectedCities = new Set();
+    const selectedRegions = new Set();
     const shortFeature=(s)=>{const t=String(s??'').trim(); return t ? (t.length>56 ? `${t.slice(0,56)}…` : t) : '-';};
     const mapUrl=(row)=>`https://map.naver.com/p/search/${encodeURIComponent(`${row.region} ${row.title}`)}`;
     const fullUrl=(u)=>{const t=String(u??'').trim(); if(!t) return '#'; return t.startsWith('/') ? `https://m.land.naver.com${t}` : t;};
     const signalClass=(v)=>v==='급매'?'b-bargain':(v==='저렴'?'b-cheap':'b-normal');
     const statusClass=(v)=>v==='다시 등록된 매물(판매중)'?'status-relisted':'status-active';
     function cityColor(city){ if(CITY_COLOR[city]) return CITY_COLOR[city]; const palette=["#2563eb","#0f766e","#9333ea","#0284c7","#dc2626","#16a34a","#ea580c"]; let h=0; for(const c of city) h=(h*31+c.charCodeAt(0))>>>0; return palette[h%palette.length]; }
-    function fillCities(){const c=uniq(RAW.map(x=>x.city));cityEl.innerHTML=`<option value="">도시(전체)</option>`+c.map(v=>`<option>${esc(v)}</option>`).join('');}
-    function fillRegions(){const city=cityEl.value;const src=city?RAW.filter(x=>x.city===city):RAW;const r=uniq(src.map(x=>x.region));const prev=regionEl.value;regionEl.innerHTML=`<option value="">지역(전체)</option>`+r.map(v=>`<option>${esc(v)}</option>`).join('');if(r.includes(prev))regionEl.value=prev;}
-    function filtered(){const city=cityEl.value,region=regionEl.value,priceBand=priceEl.value,pyeongBand=pyeongEl.value,signal=signalEl.value,status=statusEl.value,q=qEl.value.trim().toLowerCase();return RAW.filter(x=>{if(city&&x.city!==city)return false;if(region&&x.region!==region)return false;if(priceBand&&x.priceBand!==priceBand)return false;if(pyeongBand&&x.pyeongBand!==pyeongBand)return false;if(signal&&x.signal!==signal)return false;if(status&&x.statusLabel!==status)return false;if(q&&!`${x.region} ${x.title} ${x.featureDesc || ''} ${x.tagText || ''}`.toLowerCase().includes(q))return false;return true;});}
+
+    function getSelectedCities() {
+      return Array.from(selectedCities);
+    }
+
+    function getSelectedRegions() {
+      return Array.from(selectedRegions);
+    }
+
+    function getRegionSourceRows() {
+      const cities = getSelectedCities();
+      if (!cities.length) return [];
+      const citySet = new Set(cities);
+      return RAW.filter(x => citySet.has(x.city));
+    }
+
+    function syncHiddenCity() {
+      cityEl.value = selectedCities.size === 1 ? getSelectedCities()[0] : '';
+    }
+
+    function syncHiddenRegion() {
+      regionEl.value = selectedRegions.size === 1 ? getSelectedRegions()[0] : '';
+    }
+
+    function fillCities() {
+      const c = uniq(RAW.map(x => x.city));
+      cityEl.innerHTML = `<option value="">도시(전체)</option>` + c.map(v => `<option>${esc(v)}</option>`).join('');
+      syncHiddenCity();
+    }
+
+    function regionLabel(name) {
+      const i = String(name ?? '').indexOf('_');
+      return i >= 0 ? String(name).slice(i + 1) : String(name ?? '');
+    }
+
+    function renderCityQuick() {
+      const c = uniq(RAW.map(x => x.city));
+      const noneSelected = selectedCities.size === 0;
+      const chips = ['<button type="button" class="city-chip ' + (noneSelected ? 'active' : '') + '" data-city="">도시(전체)</button>']
+              .concat(c.map(v => `<button type="button" class="city-chip ${selectedCities.has(v) ? 'active' : ''}" data-city="${esc(v)}">${esc(v)}</button>`));
+      const countText = selectedCities.size ? `${selectedCities.size}개 선택` : '전체';
+      cityQuickEl.innerHTML = `<div class="city-quick-title"><span>도시 빠른 선택 (복수 선택)</span><span class="quick-count">${countText}</span></div><div class="city-quick-list">${chips.join('')}</div>`;
+    }
+
+    function renderRegionQuick() {
+      if (selectedCities.size === 0) {
+        const active = selectedRegions.size === 0 ? 'active' : '';
+        const countText = selectedRegions.size ? `${selectedRegions.size}개 선택` : '전체';
+        regionQuickEl.innerHTML = `<div class="region-quick-title"><span>지역 빠른 선택 (복수 선택)</span><span class="quick-count">${countText}</span></div><div class="region-quick-list"><button type="button" class="region-chip ${active}" data-region="">지역(전체)</button></div><div class="hint">도시를 먼저 1개 이상 선택하세요.</div>`;
+        return;
+      }
+      const src = getRegionSourceRows();
+      const regions = uniq(src.map(x => x.region));
+      const regionSet = new Set(regions);
+      for (const r of [...selectedRegions]) {
+        if (!regionSet.has(r)) selectedRegions.delete(r);
+      }
+      syncHiddenRegion();
+      const noneSelected = selectedRegions.size === 0;
+      const chips = ['<button type="button" class="region-chip ' + (noneSelected ? 'active' : '') + '" data-region="">지역(전체)</button>']
+              .concat(regions.map(v => `<button type="button" class="region-chip ${selectedRegions.has(v) ? 'active' : ''}" data-region="${esc(v)}">${esc(regionLabel(v))}</button>`));
+      const countText = selectedRegions.size ? `${selectedRegions.size}개 선택` : '전체';
+      regionQuickEl.innerHTML = `<div class="region-quick-title"><span>지역 빠른 선택 (복수 선택)</span><span class="quick-count">${countText}</span></div><div class="region-quick-list">${chips.join('')}</div>`;
+    }
+
+    function updateActiveFilterBar() {
+      const chips = [];
+      const cities = getSelectedCities();
+      const regions = getSelectedRegions();
+      const addChip = (label, type, value = '') => {
+        const valueAttr = value ? ` data-value="${esc(value)}"` : '';
+        chips.push(`<button type="button" class="af-chip" data-clear="${type}"${valueAttr}><span>${esc(label)}</span><span class="x">×</span></button>`);
+      };
+
+      cities.forEach(c => addChip(`도시: ${c}`, 'city', c));
+      regions.forEach(r => addChip(`지역: ${regionLabel(r)}`, 'region', r));
+      if (priceEl.value) addChip(`가격대: ${priceEl.value}`, 'price');
+      if (pyeongEl.value) addChip(`평형: ${pyeongEl.value}`, 'pyeong');
+      if (signalEl.value) addChip(`판단: ${signalEl.value}`, 'signal');
+      if (statusEl.value) addChip(`상태: ${statusEl.value}`, 'status');
+      if (qEl.value.trim()) addChip(`검색: ${qEl.value.trim()}`, 'q');
+
+      if (!chips.length) {
+        activeFilterBar.hidden = true;
+        activeFilterBar.innerHTML = '';
+        return;
+      }
+
+      activeFilterBar.hidden = false;
+      activeFilterBar.innerHTML = `<div class="af-title">활성 필터</div><div class="af-list">${chips.join('')}</div><button type="button" class="af-clear-all" data-clear="all">전체 해제</button>`;
+    }
+
+    function fillRegions() {
+      const src = getRegionSourceRows();
+      const r = uniq(src.map(x => x.region));
+      regionEl.innerHTML = `<option value="">지역(전체)</option>` + r.map(v => `<option>${esc(v)}</option>`).join('');
+      syncHiddenRegion();
+    }
+
+    function filtered() {
+      const cities = getSelectedCities();
+      const regions = getSelectedRegions();
+      const citySet = cities.length ? new Set(cities) : null;
+      const regionSet = regions.length ? new Set(regions) : null;
+      const priceBand = priceEl.value, pyeongBand = pyeongEl.value, signal = signalEl.value, status = statusEl.value,
+              q = qEl.value.trim().toLowerCase();
+      return RAW.filter(x => {
+        if (citySet && !citySet.has(x.city)) return false;
+        if (regionSet && !regionSet.has(x.region)) return false;
+        if (priceBand && x.priceBand !== priceBand) return false;
+        if (pyeongBand && x.pyeongBand !== pyeongBand) return false;
+        if (signal && x.signal !== signal) return false;
+        if (status && x.statusLabel !== status) return false;
+        if (q && !`${x.region} ${x.title} ${x.featureDesc || ''} ${x.tagText || ''}`.toLowerCase().includes(q)) return false;
+        return true;
+      });
+    }
     function compareRows(a,b,key){
       if(['city','title','featureDesc','tagText','signal','statusLabel','region'].includes(key)){
         return String(a[key]??'').localeCompare(String(b[key]??''),'ko');
@@ -177,6 +915,7 @@
       else collapsedRegions.add(regionName);
     }
     function render(){
+      updateActiveFilterBar();
       const rows=sortRows(filtered());
       const g=new Map();
       for(const r of rows){if(!g.has(r.region))g.set(r.region,[]);g.get(r.region).push(r);}
@@ -194,7 +933,7 @@
       const visibleEntries=entries.slice(0, visibleRegionBlocks);
       const hiddenRegions=entries.length-visibleEntries.length;
 
-      regionsEl.innerHTML=visibleEntries.map(([name,items])=>{
+      regionsEl.innerHTML=visibleEntries.map(([name,items], idx)=>{
         const city=items[0]?.city||'';
         const accent=cityColor(city);
         const countBargain=items.filter(x=>x.signal==='급매').length;
@@ -223,9 +962,46 @@
           ? `<div class="region-footer"><button type="button" class="load-more" data-region-key="${regionKey}">+ ${Math.min(REGION_ROWS_STEP, hiddenCount)}건 더보기 (남은 ${hiddenCount}건)</button></div>`
           : '';
         const contentHtml = collapsed ? '' : `<div class="table-wrap"><table><thead>${headerHtml}</thead><tbody>${rowsHtml}</tbody></table></div>${footerHtml}`;
-        return `<section class="region ${collapsed ? 'collapsed' : ''}" style="--accent:${accent};"><div class="head" data-role="region-head" data-region-key="${regionKey}" role="button" tabindex="0" aria-expanded="${collapsed ? 'false' : 'true'}"><div class="title-wrap"><span class="collapse-caret">${caret}</span><div class="title">${esc(name)} <span style="color:#64748b;font-size:13px;">(${items.length}건)</span></div><span class="collapse-label">${collapseLabel}</span></div><div class="chips">${chips}</div></div>${contentHtml}</section>`;
+        return `<section class="region ${collapsed ? 'collapsed' : ''}" style="--accent:${accent};--delay:${Math.min(idx * 18, 180)}ms;"><div class="head" data-role="region-head" data-region-key="${regionKey}" role="button" tabindex="0" aria-expanded="${collapsed ? 'false' : 'true'}"><div class="title-wrap"><span class="collapse-caret">${caret}</span><div class="title">${esc(name)} <span style="color:#64748b;font-size:13px;">(${items.length}건)</span></div><span class="collapse-label">${collapseLabel}</span></div><div class="chips">${chips}</div></div>${contentHtml}</section>`;
       }).join('') + (hiddenRegions>0 ? `<div class="list-footer"><button type="button" class="load-more" data-role="load-more-regions">+ 지역 ${Math.min(REGION_BLOCK_STEP, hiddenRegions)}개 더보기 (남은 ${hiddenRegions}개)</button></div><div class="hint">모바일/저사양 브라우저 안정성을 위해 지역별로 나눠 렌더링합니다.</div>` : '');
     }
+
+    activeFilterBar.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-clear]');
+      if (!btn) return;
+      const type = btn.dataset.clear || '';
+      const value = btn.dataset.value || '';
+
+      if (type === 'all') {
+        resetBtn.click();
+        return;
+      }
+      if (type === 'city' && value) selectedCities.delete(value);
+      if (type === 'region' && value) selectedRegions.delete(value);
+      if (type === 'price') priceEl.value = '';
+      if (type === 'pyeong') pyeongEl.value = '';
+      if (type === 'signal') signalEl.value = '';
+      if (type === 'status') statusEl.value = '';
+      if (type === 'q') qEl.value = '';
+
+      if (type === 'city') {
+        if (selectedCities.size === 0) selectedRegions.clear();
+        else {
+          const allowed = new Set(getRegionSourceRows().map(x => x.region));
+          for (const r of [...selectedRegions]) {
+            if (!allowed.has(r)) selectedRegions.delete(r);
+          }
+        }
+      }
+
+      syncHiddenCity();
+      syncHiddenRegion();
+      fillRegions();
+      renderCityQuick();
+      renderRegionQuick();
+      resetRegionVisible();
+      render();
+    });
 
     regionsEl.addEventListener('click',(event)=>{
       const regionHead=event.target.closest('[data-role="region-head"]');
@@ -274,11 +1050,90 @@
       render();
     });
 
-    cityEl.addEventListener('change',()=>{fillRegions();resetRegionVisible();render();});
-    [regionEl,priceEl,pyeongEl,signalEl,statusEl].forEach(el=>el.addEventListener('change',()=>{resetRegionVisible();render();}));
+    cityQuickEl.addEventListener('click', (event) => {
+      const btn = event.target.closest('button.city-chip');
+      if (!btn) return;
+      const city = btn.dataset.city || '';
+      if (!city) {
+        selectedCities.clear();
+        selectedRegions.clear();
+      } else {
+        if (selectedCities.has(city)) selectedCities.delete(city);
+        else selectedCities.add(city);
+      }
+      if (selectedCities.size === 0) {
+        selectedRegions.clear();
+      } else {
+        const allowed = new Set(getRegionSourceRows().map(x => x.region));
+        for (const r of [...selectedRegions]) {
+          if (!allowed.has(r)) selectedRegions.delete(r);
+        }
+      }
+      syncHiddenCity();
+      syncHiddenRegion();
+      fillRegions();
+      resetRegionVisible();
+      renderCityQuick();
+      renderRegionQuick();
+      render();
+    });
+
+    regionQuickEl.addEventListener('click', (event) => {
+      const btn = event.target.closest('button.region-chip');
+      if (!btn) return;
+      const region = btn.dataset.region || '';
+      if (!region) {
+        selectedRegions.clear();
+      } else {
+        if (selectedRegions.has(region)) selectedRegions.delete(region);
+        else selectedRegions.add(region);
+      }
+      syncHiddenRegion();
+      resetRegionVisible();
+      renderRegionQuick();
+      render();
+    });
+
+    cityEl.addEventListener('change', () => {
+      selectedCities.clear();
+      if (cityEl.value) selectedCities.add(cityEl.value);
+      fillRegions();
+      resetRegionVisible();
+      renderCityQuick();
+      renderRegionQuick();
+      render();
+    });
+    regionEl.addEventListener('change', () => {
+      selectedRegions.clear();
+      if (regionEl.value) selectedRegions.add(regionEl.value);
+      resetRegionVisible();
+      renderRegionQuick();
+      render();
+    });
+    [priceEl, pyeongEl, signalEl, statusEl].forEach(el => el.addEventListener('change', () => {
+      resetRegionVisible();
+      render();
+    }));
     let qTimer=0;
     qEl.addEventListener('input',()=>{window.clearTimeout(qTimer);qTimer=window.setTimeout(()=>{resetRegionVisible();render();},180);});
-    resetBtn.addEventListener('click',()=>{cityEl.value='';fillRegions();regionEl.value='';priceEl.value='';pyeongEl.value='';signalEl.value='';statusEl.value='';qEl.value='';sortState.key=SORT_DEFAULT.key;sortState.dir=SORT_DEFAULT.dir;resetRegionVisible();render();});
+    resetBtn.addEventListener('click', () => {
+      selectedCities.clear();
+      selectedRegions.clear();
+      cityEl.value = '';
+      regionEl.value = '';
+      fillRegions();
+      priceEl.value = '';
+      pyeongEl.value = '';
+      signalEl.value = '';
+      statusEl.value = '';
+      qEl.value = '';
+      sortState.key = SORT_DEFAULT.key;
+      sortState.dir = SORT_DEFAULT.dir;
+      resetRegionVisible();
+      renderCityQuick();
+      renderRegionQuick();
+      render();
+    });
 
     async function init(){
       try{
@@ -287,7 +1142,9 @@
         const loaded = await response.json();
         RAW = Array.isArray(loaded) ? loaded : [];
         fillCities();
+        renderCityQuick();
         fillRegions();
+        renderRegionQuick();
         render();
       }catch(error){
         console.error('report init failed', error);

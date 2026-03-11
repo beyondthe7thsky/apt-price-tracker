@@ -35,6 +35,7 @@ class BotRunner(
     @Value("\${bot.safe.save-run-progress:true}") private val saveRunProgressEnabled: Boolean,
     @Value("\${bot.safe.region-delay-min-ms:5000}") private val regionDelayMinMs: Long,
     @Value("\${bot.safe.region-delay-max-ms:9000}") private val regionDelayMaxMs: Long,
+    @Value("\${bot.safe.max-run-minutes:0}") private val maxRunMinutes: Int,
     @Value("\${bot.market.off-market-confirm-miss-count:3}") private val offMarketConfirmMissCount: Int,
 ) : CommandLineRunner {
 
@@ -232,12 +233,8 @@ class BotRunner(
         }
 
         val totalRegions = shardTargetRegions.size
-        val baseOffset = if (rotateStartByDay && totalRegions > 0) LocalDate.now().dayOfYear % totalRegions else 0
-        val effectiveOffset = if (totalRegions > 0) {
-            ((baseOffset + startRegionOffset) % totalRegions + totalRegions) % totalRegions
-        } else {
-            0
-        }
+        val baseOffset = if (rotateStartByDay) LocalDate.now().dayOfYear % totalRegions else 0
+        val effectiveOffset = ((baseOffset + startRegionOffset) % totalRegions + totalRegions) % totalRegions
         val orderedRegions = if (effectiveOffset == 0) {
             shardTargetRegions
         } else {
@@ -265,10 +262,22 @@ class BotRunner(
         val successfulRegions = mutableSetOf<String>()
         var blockedByAbuse = false
         var abortedByAbuse = false
+        var stoppedByTimeBudget = false
         var blockedRegionName: String? = null
         var nextStartOffset = effectiveOffset
         var lastRegionName = ""
         val abuseSkippedRegionQueue = linkedMapOf<String, Map<String, String>>()
+        val runStartedAt = System.currentTimeMillis()
+        val maxRunMillis = maxRunMinutes.coerceAtLeast(0).toLong() * 60_000L
+
+        fun elapsedMillis(): Long = System.currentTimeMillis() - runStartedAt
+        fun isTimeBudgetExceeded(): Boolean = maxRunMillis > 0 && elapsedMillis() >= maxRunMillis
+        fun timeBudgetLogText(): String {
+            if (maxRunMillis <= 0) return "무제한"
+            val elapsedSec = elapsedMillis() / 1000
+            val limitSec = maxRunMillis / 1000
+            return "${elapsedSec}s/${limitSec}s"
+        }
 
         fun persistRunProgress(reason: String, blockedRegion: String? = null) {
             if (!saveRunProgressEnabled || totalRegions <= 0) return
@@ -301,16 +310,31 @@ class BotRunner(
             )
         }
 
-        fun waitBeforeNextRegion(shouldWait: Boolean) {
-            if (!shouldWait) return
-            val delayMillis = nextRegionDelayMillis()
+        fun waitBeforeNextRegion(shouldWait: Boolean): Boolean {
+            if (!shouldWait) return true
+            if (isTimeBudgetExceeded()) return false
+            var delayMillis = nextRegionDelayMillis()
+            if (maxRunMillis > 0) {
+                val remaining = (maxRunMillis - elapsedMillis()).coerceAtLeast(0L)
+                delayMillis = delayMillis.coerceAtMost(remaining)
+            }
             log.info("다음 지역 수집 전 {}ms 대기", delayMillis)
             if (delayMillis > 0) {
                 Thread.sleep(delayMillis)
             }
+            return !isTimeBudgetExceeded()
         }
 
         mainLoop@ for ((index, region) in runRegions.withIndex()) {
+            if (isTimeBudgetExceeded()) {
+                stoppedByTimeBudget = true
+                log.warn(
+                    "실행 시간 예산 도달로 조기 종료합니다. 다음 오프셋: {}, 경과/제한: {}",
+                    nextStartOffset,
+                    timeBudgetLogText()
+                )
+                break@mainLoop
+            }
             val regionName = region["name"]!!
             val regionCode = region["code"]!!
             val regionAbsoluteIndex = (effectiveOffset + index) % totalRegions
@@ -343,19 +367,45 @@ class BotRunner(
                     persistRunProgress("RUNNING")
                 }
             }
-            waitBeforeNextRegion(index < runRegions.lastIndex)
+            if (!waitBeforeNextRegion(index < runRegions.lastIndex)) {
+                stoppedByTimeBudget = true
+                log.warn(
+                    "실행 시간 예산 도달로 조기 종료합니다. 다음 오프셋: {}, 경과/제한: {}",
+                    nextStartOffset,
+                    timeBudgetLogText()
+                )
+                break@mainLoop
+            }
         }
 
         if (!stopRunOnAbuse && replayAbuseSkippedRegionsEnabled && abuseSkippedRegionQueue.isNotEmpty()) {
             val replayRounds = maxAbuseReplayRounds.coerceAtLeast(0)
             for (round in 1..replayRounds) {
                 if (abuseSkippedRegionQueue.isEmpty()) break
+                if (isTimeBudgetExceeded()) {
+                    stoppedByTimeBudget = true
+                    log.warn(
+                        "재수집 단계에서 실행 시간 예산 도달로 조기 종료합니다. 다음 오프셋: {}, 경과/제한: {}",
+                        nextStartOffset,
+                        timeBudgetLogText()
+                    )
+                    break
+                }
 
                 val replayTargets = abuseSkippedRegionQueue.values.toList()
                 abuseSkippedRegionQueue.clear()
                 log.warn("abuse 차단 스킵 지역 재수집 {}차 시작: {}개", round, replayTargets.size)
 
                 for ((index, region) in replayTargets.withIndex()) {
+                    if (isTimeBudgetExceeded()) {
+                        stoppedByTimeBudget = true
+                        log.warn(
+                            "재수집 단계에서 실행 시간 예산 도달로 조기 종료합니다. 다음 오프셋: {}, 경과/제한: {}",
+                            nextStartOffset,
+                            timeBudgetLogText()
+                        )
+                        break
+                    }
                     val regionName = region["name"]!!
                     val regionCode = region["code"]!!
                     when (val outcome = fetchRegionWithCooldownRetry(regionName, regionCode)) {
@@ -372,8 +422,17 @@ class BotRunner(
                             log.warn("{} 재수집 실패(기존 데이터 유지): {}", regionName, outcome.reason)
                         }
                     }
-                    waitBeforeNextRegion(index < replayTargets.lastIndex)
+                    if (!waitBeforeNextRegion(index < replayTargets.lastIndex)) {
+                        stoppedByTimeBudget = true
+                        log.warn(
+                            "재수집 단계에서 실행 시간 예산 도달로 조기 종료합니다. 다음 오프셋: {}, 경과/제한: {}",
+                            nextStartOffset,
+                            timeBudgetLogText()
+                        )
+                        break
+                    }
                 }
+                if (stoppedByTimeBudget) break
             }
         }
 
@@ -385,6 +444,9 @@ class BotRunner(
                 } else {
                     persistRunProgress("ABUSE_NO_SUCCESS", blockedRegionName)
                 }
+            } else if (stoppedByTimeBudget) {
+                log.warn("실행 시간 예산 도달로 성공 지역 없이 종료합니다. 다음 시작 오프셋: {}", nextStartOffset)
+                persistRunProgress("TIME_BUDGET_NO_SUCCESS")
             } else {
                 log.warn("성공한 지역이 없어 기존 JSON 데이터를 유지합니다.")
                 persistRunProgress("NO_SUCCESS")
@@ -428,6 +490,9 @@ class BotRunner(
         if (abortedByAbuse) {
             log.warn("abuse 감지로 실행을 조기 종료했습니다. 다음 시작 오프셋: {}", nextStartOffset)
             persistRunProgress("ABUSE_ABORTED", blockedRegionName)
+        } else if (stoppedByTimeBudget) {
+            log.warn("실행 시간 예산 도달로 조기 종료했습니다. 다음 시작 오프셋: {}", nextStartOffset)
+            persistRunProgress("TIME_BUDGET")
         } else if (abuseSkippedRegions > 0) {
             persistRunProgress("PARTIAL")
         } else {
