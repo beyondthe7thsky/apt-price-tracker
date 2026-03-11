@@ -4,7 +4,7 @@
 
 ## 라이브 리포트
 
-<img width="1288" height="884" alt="image" src="https://github.com/user-attachments/assets/3ab270cc-ce3d-46da-bb30-17b237fee292" />
+<img width="1262" height="955" alt="image" src="https://github.com/user-attachments/assets/9e3414b6-7766-4b12-95cc-e18b8045441a" />
 
 ## 현재 수집 범위
 
