@@ -31,6 +31,7 @@ class BotRunner(
     @Value("\${bot.safe.stop-run-on-abuse:true}") private val stopRunOnAbuse: Boolean,
     @Value("\${bot.safe.replay-abuse-skipped-regions:true}") private val replayAbuseSkippedRegionsEnabled: Boolean,
     @Value("\${bot.safe.max-abuse-replay-rounds:2}") private val maxAbuseReplayRounds: Int,
+    @Value("\${bot.safe.region-shard:0}") private val regionShard: Int,
     @Value("\${bot.safe.save-run-progress:true}") private val saveRunProgressEnabled: Boolean,
     @Value("\${bot.safe.region-delay-min-ms:5000}") private val regionDelayMinMs: Long,
     @Value("\${bot.safe.region-delay-max-ms:9000}") private val regionDelayMaxMs: Long,
@@ -180,7 +181,16 @@ class BotRunner(
             mapOf("name" to "안양_호계동", "code" to "4117310400")
         )
 
-        val totalRegions = targetRegions.size
+        val normalizedRegionShard = if (regionShard in 1..8) regionShard else 0
+        val shardTargetRegions = targetRegions.filterIndexed { index, _ ->
+            normalizedRegionShard == 0 || regionGroupByIndex(index) == normalizedRegionShard
+        }
+        if (shardTargetRegions.isEmpty()) {
+            log.warn("실행 대상 지역이 없습니다. region-shard={}, totalRegions={}", normalizedRegionShard, targetRegions.size)
+            return
+        }
+
+        val totalRegions = shardTargetRegions.size
         val baseOffset = if (rotateStartByDay && totalRegions > 0) LocalDate.now().dayOfYear % totalRegions else 0
         val effectiveOffset = if (totalRegions > 0) {
             ((baseOffset + startRegionOffset) % totalRegions + totalRegions) % totalRegions
@@ -188,19 +198,22 @@ class BotRunner(
             0
         }
         val orderedRegions = if (effectiveOffset == 0) {
-            targetRegions
+            shardTargetRegions
         } else {
-            targetRegions.drop(effectiveOffset) + targetRegions.take(effectiveOffset)
+            shardTargetRegions.drop(effectiveOffset) + shardTargetRegions.take(effectiveOffset)
         }
 
+        val runToTailOnly = maxRegionsPerRun <= 0 && !rotateStartByDay && effectiveOffset > 0
         val runLimit = when {
+            runToTailOnly -> totalRegions - effectiveOffset
             maxRegionsPerRun <= 0 -> totalRegions
             maxRegionsPerRun >= totalRegions -> totalRegions
             else -> maxRegionsPerRun
         }
         val runRegions = orderedRegions.take(runLimit)
         log.info(
-            "=== [네이버 모바일] 결혼 준비용 매물 감시 가동 (전체: {}개 동, 이번 실행: {}개 동, 시작 오프셋: {}) ===",
+            "=== [네이버 모바일] 아파트 매매용 매물 감시 가동 (shard: {}, 전체: {}개 동, 이번 실행: {}개 동, 시작 오프셋: {}) ===",
+            if (normalizedRegionShard == 0) "ALL" else normalizedRegionShard,
             totalRegions,
             runRegions.size,
             effectiveOffset
@@ -493,6 +506,17 @@ class BotRunner(
         val min = if (minMs > 0) minMs else defaultMinMs
         val max = if (maxMs >= min) maxMs else defaultMaxMs.coerceAtLeast(min)
         return min to max
+    }
+
+    private fun regionGroupByIndex(index: Int): Int = when (index) {
+        in 0..6 -> 1
+        in 7..12 -> 2
+        in 13..21 -> 3
+        in 22..29 -> 4
+        in 30..37 -> 5
+        in 38..69 -> 6
+        in 70..113 -> 7
+        else -> 8
     }
 
     private fun mergeSeenListing(old: Listing?, fresh: Listing, now: String): Listing {

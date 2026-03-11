@@ -14,6 +14,7 @@ bot:
     stop-run-on-abuse: true
     replay-abuse-skipped-regions: false
     max-abuse-replay-rounds: 0
+    region-shard: 0
     save-run-progress: true
     region-delay-min-ms: 3000
     region-delay-max-ms: 6000

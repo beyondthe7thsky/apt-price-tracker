@@ -1,92 +1,138 @@
 # apt-price-tracker
 
-네이버 모바일 부동산(`m.land.naver.com`) 매물을 수집해 `data/apt-listings.json`으로 관리하고,
-웹 리포트(GitHub Pages) + Teams 카드로 요약 알림을 보내는 배치 프로젝트입니다.
+네이버 모바일 부동산(`m.land.naver.com`) 매물을 수집하고, GitHub Pages 리포트/Teams 알림으로 공유하는 배치 프로젝트입니다.
 
 ![오늘의 아파트 매물 리포트](docs/images/dashboard-report.svg)
 
 ## 라이브 리포트
 
-- 웹 주소: [https://saechimdaeki.github.io/apt-price-tracker/](https://saechimdaeki.github.io/apt-price-tracker/)
+- [https://saechimdaeki.github.io/apt-price-tracker/](https://saechimdaeki.github.io/apt-price-tracker/)
 
-## 핵심 기능
+## 현재 수집 범위
 
-- 대상 지역(현재 79개 동) 순회 수집
-- 20~39평 매물만 저장
-- 매물 상태 라이프사이클 관리
-  - `ACTIVE` (판매중)
-  - `OFF_MARKET_CANDIDATE` (거래종결 후보)
-  - `OFF_MARKET` (거래종결 추정)
-  - `RELISTED` (다시 등록된 매물(판매중))
-- 가격 신호 분류
-  - 급매: 평균 대비 `-10%` 이하
-  - 저렴: 평균 대비 `-5%` 이하
-- GitHub Pages 리포트 자동 배포
-- Teams 1회 요약 카드 + 리포트 링크 전송
+- 총 `119개 동`
+- 기준: 아파트 매매 매물, `20~39평`만 저장
+- 그룹(샤드) 기준으로 실행/이어받기 가능
 
-## 매물 상태 처리 규칙
+### 1) 수원시 (영통구, 광교, 화서) - 7개
 
-- 이번 실행에서 **성공한 지역** 기준으로만 상태 전환
-- 미노출 1~N회 누적 시 `OFF_MARKET_CANDIDATE`(거래종결 후보) → 임계치 도달 시 `OFF_MARKET`(거래종결 추정)
-- `OFF_MARKET` 매물이 다시 보이면 `RELISTED` (다시 등록된 매물)
-- 지역 수집 중 차단/실패가 나면 해당 지역 데이터는 이번 회차 상태 전환에서 제외
+- 수원_매탄동, 수원_영통동, 수원_망포동, 수원_이의동, 수원_하동, 수원_화서동, 수원_천천동
 
-## 리포트 계산 기준
+### 2) 용인시 수지구 - 6개
 
-- 단지 평균가: 같은 단지(지역 + 단지키)의 현재 노출 매물 평균
-- 평균대비(%): `(매물가 - 단지평균가) / 단지평균가 * 100`
-- 리포트 표에는 `ACTIVE`, `RELISTED(다시 등록된 매물)`만 노출
+- 용인수지_풍덕천동, 용인수지_죽전동, 용인수지_동천동, 용인수지_신봉동, 용인수지_성복동, 용인수지_상현동
 
-## 실행 구조
+### 3) 서울 마용성 - 9개
+
+- 서울마포_아현동, 서울마포_공덕동, 서울마포_상암동, 서울마포_염리동, 서울성동_옥수동, 서울성동_금호동1가, 서울성동_행당동, 서울성동_성수동1가, 서울용산_이촌동
+
+### 4) 서울 서남권 - 8개
+
+- 서울양천_목동, 서울양천_신정동, 서울강서_마곡동, 서울강서_내발산동, 서울강서_화곡동, 서울영등포_신길동, 서울영등포_문래동3가, 서울영등포_여의도동
+
+### 5) 서울 남부 - 8개
+
+- 서울동작_흑석동, 서울동작_상도동, 서울동작_사당동, 서울관악_봉천동, 서울구로_신도림동, 서울구로_구로동, 서울구로_개봉동, 서울금천_독산동
+
+### 6) 서울 동부/서북권 - 32개
+
+- 서울강동_고덕동, 서울강동_명일동, 서울강동_상일동, 서울광진_광장동, 서울광진_자양동, 서울동대문_용두동, 서울동대문_제기동, 서울동대문_전농동, 서울동대문_답십리동, 서울동대문_장안동, 서울동대문_청량리동, 서울동대문_회기동, 서울동대문_휘경동, 서울동대문_이문동, 서울성북_길음동, 서울성북_정릉동, 서울성북_종암동, 서울성북_하월곡동, 서울성북_상월곡동, 서울성북_장위동, 서울서대문_북아현동, 서울서대문_홍제동, 서울서대문_연희동, 서울서대문_홍은동, 서울서대문_남가좌동, 서울서대문_북가좌동, 서울종로_무악동, 서울종로_평동, 서울중구_신당동, 서울중구_중림동, 서울은평_진관동, 서울은평_응암동
+
+### 7) 성남 전역 - 44개
+
+- 성남수정_신흥동, 성남수정_태평동, 성남수정_수진동, 성남수정_단대동, 성남수정_산성동, 성남수정_양지동, 성남수정_복정동, 성남수정_창곡동, 성남수정_신촌동, 성남수정_오야동, 성남수정_심곡동, 성남수정_고등동, 성남수정_상적동, 성남수정_둔전동, 성남수정_시흥동, 성남수정_금토동, 성남수정_사송동, 성남중원_성남동, 성남중원_금광동, 성남중원_은행동, 성남중원_상대원동, 성남중원_여수동, 성남중원_도촌동, 성남중원_갈현동, 성남중원_하대원동, 성남중원_중앙동, 성남분당_분당동, 성남분당_수내동, 성남분당_정자동, 성남분당_율동, 성남분당_서현동, 성남분당_이매동, 성남분당_야탑동, 성남판교_판교동, 성남판교_삼평동, 성남판교_백현동, 성남분당_금곡동, 성남분당_궁내동, 성남분당_동원동, 성남분당_구미동, 성남판교_운중동, 성남판교_대장동, 성남판교_석운동, 성남판교_하산운동
+
+### 8) 안양권 - 5개
+
+- 안양_안양동, 안양_비산동, 안양_관양동, 안양_평촌동, 안양_호계동
+
+## 최근 변경된 실행 로직
+
+- 샤드별 수집/저장 지원
+  - `bot.safe.region-shard=1..8`이면 샤드별 파일 사용
+  - `data/apt-listings-s{N}.json`
+  - `data/run-progress-s{N}.json`
+  - `0`이면 기존 통합 파일(`data/apt-listings.json`, `data/run-progress.json`)
+- 차단(abuse) 감지 시 조기 종료 + 진행 오프셋 저장
+  - 다음 실행에서 같은 샤드의 `run-progress`를 읽어 이어서 실행
+- 수동 실행에서 오프셋 의미 정리
+  - `start_region_offset`을 비우면: 저장된 진행 오프셋 자동 이어받기
+  - `start_region_offset=0`: 해당 그룹 처음부터 재시작
+  - `max_regions_per_run=0` + `start_region_offset>0`: 래핑 없이 오프셋부터 그룹 끝까지만 실행
+- 리포트 워크플로우는 샤드 JSON 자동 병합
+  - `data/apt-listings-s*.json` 우선 사용
+  - 없으면 `data/apt-listings.json` 사용
+
+## 워크플로우
 
 ### 1) 수집 워크플로우
 
-파일: `.github/workflows/apt-price-bot.yml`
+- 파일: `.github/workflows/apt-price-bot.yml`
+- 스케줄:
+  - KST 08:30 (평일)
+  - KST 13:30 (평일)
+- 스케줄 실행 시 샤드 `1~8` 병렬 실행(matrix)
+- 수동 실행 시 지역 그룹을 사람이 읽기 쉬운 라벨로 선택 가능
+- 변경된 `data/apt-listings*.json`, `data/run-progress*.json` 자동 커밋
 
-- 평일 KST 08:30 자동 실행 (1차, 35개 동)
-- 평일 KST 11:30 자동 실행 (2차, 35개 동)
-- 수동 실행 가능 (`workflow_dispatch`)
-- 실행 후 `data/apt-listings.json` 변경 시 자동 커밋
+수동 실행 입력값:
+
+- `region_scope`: 실행할 지역 그룹
+- `max_regions_per_run`: 이번 실행 최대 동 수 (`0`이면 전체, 단 `offset>0`이면 그룹 끝까지만)
+- `start_region_offset`: 시작 오프셋 (비우면 자동 이어받기)
+- `max_complex_pages_on_overflow`: 매물량 많은 단지 확장 페이지 상한
+- `max_complexes_per_region`: 지역별 최대 단지 수 (`0`이면 제한 없음)
+- `commit_data`: 데이터 자동 커밋 여부
 
 ### 2) 리포트/알림 워크플로우
 
-파일: `.github/workflows/send-teams-from-json.yml`
+- 파일: `.github/workflows/send-teams-from-json.yml`
+- 스케줄: KST 13:00 (평일)
+- 샤드 데이터 병합 후 `pages/index.html` 생성/배포
+- Teams 웹훅이 설정되어 있으면 요약 카드 1회 전송
 
-- 평일 KST 13:00 자동 실행 (`cron`)
-- 수동 실행 가능 (`workflow_dispatch`)
-- `pages/index.html` 생성 후 GitHub Pages 배포
-- Teams에 요약 카드 1건 전송 (웹 리포트 링크 포함)
+## 매물 상태 규칙
 
-## 필요한 설정
-
-### GitHub Secrets
-
-- `TEAMS_WEBHOOK_URL`: Power Automate/Teams Webhook URL
-
-### GitHub Pages
-
-- Repository Settings → Pages → Source: **GitHub Actions**
+- 상태:
+  - `ACTIVE` (판매중)
+  - `OFF_MARKET_CANDIDATE` (거래종결 후보)
+  - `OFF_MARKET` (거래종결 추정)
+  - `RELISTED` (다시 등록된 매물)
+- 이번 실행에서 수집 성공한 지역 기준으로 상태 전환
+- 수집 실패/차단 지역은 해당 회차 상태 전환 대상에서 제외
 
 ## 주요 설정값
 
-파일: `src/main/resources/application.yml`
+- 파일: `src/main/resources/application.yml`
 
-- `bot.safe.max-regions-per-run`: 기본 `0` (전체 동 실행)
-- `bot.safe.rotate-start-by-day`: 기본 `true` (매일 시작 동 순환)
-- `bot.safe.start-region-offset`: 추가 시작 오프셋
-- `bot.safe.retry-region-after-abuse`: 차단 시 지역 재시도 활성화
-- `bot.safe.max-abuse-retry-per-region`: 차단 시 지역별 최대 재시도 횟수
-- `bot.safe.max-abuse-wait-ms`: 차단 재시도 전 최대 대기 시간
-- `bot.market.off-market-confirm-miss-count`: 거래종결 추정 전환 임계치
-- `naver.safe.abuse-cooldown-minutes`: abuse 감지 후 쿨다운(기본 `8`분)
-- `naver.safe.request-timeout-ms`: 요청 타임아웃
-- `naver.safe.max-complexes-per-region`: 지역별 단지 수집 상한(기본 `20`)
-- `naver.safe.rotate-complexes-by-day`: 단지 상한 적용 시 일자별 수집 단지 순환
+`bot.safe.*`:
+
+- `max-regions-per-run`: 실행당 최대 동 수 (`0` 전체)
+- `start-region-offset`: 시작 오프셋
+- `region-shard`: `0`(전체) 또는 `1~8`(그룹 실행)
+- `stop-run-on-abuse`: 차단 시 실행 중단
+- `save-run-progress`: 진행 오프셋 저장
+- `region-delay-min-ms`, `region-delay-max-ms`: 지역 간 딜레이
+
+`naver.safe.*`:
+
+- `max-complex-pages`: 기본 페이지 상한
+- `max-complex-pages-on-overflow`: 매물량 많은 단지 확장 페이지 상한
+- `max-complexes-per-region`: 지역당 단지 상한
+- `complex-delay-*`, `batch-cooldown-*`, `overflow-batch-cooldown-*`: 요청/배치 딜레이
+- `request-timeout-ms`: 요청 타임아웃
+- `abuse-cooldown-minutes`: abuse 감지 후 쿨다운(현재 기본 5분)
 
 ## 로컬 실행
 
 ```bash
 ./gradlew clean bootRun
+```
+
+컴파일 체크:
+
+```bash
+./gradlew --no-daemon compileKotlin
 ```
 
 테스트:
@@ -95,19 +141,20 @@
 ./gradlew test
 ```
 
-## Self-hosted Runner
+## 필요한 설정
+
+### GitHub Secrets
+
+- `TEAMS_WEBHOOK_URL`: Teams Webhook URL (없으면 알림 스킵, JSON/리포트는 생성)
+
+### GitHub Pages
+
+- Repository Settings -> Pages -> Source: **GitHub Actions**
+
+## Runner
 
 현재 워크플로우 러너:
 
 ```yaml
 runs-on: [self-hosted, macOS, ARM64]
-```
-
-러너 상태 관리:
-
-```bash
-cd ~/actions-runner/apt-price-tracker-runner
-./svc.sh status
-./svc.sh start
-./svc.sh stop
 ```

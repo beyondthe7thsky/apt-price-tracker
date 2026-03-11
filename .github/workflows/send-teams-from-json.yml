@@ -42,15 +42,34 @@ jobs:
           import os
           import pathlib
 
-          path = pathlib.Path("data/apt-listings.json")
-          if not path.exists():
-              raise SystemExit("data/apt-listings.json not found")
+          data_dir = pathlib.Path("data")
+          primary = data_dir / "apt-listings.json"
+          shard_files = sorted(data_dir.glob("apt-listings-s*.json"))
+          source_files = shard_files if shard_files else ([primary] if primary.exists() else [])
+          if not source_files:
+              raise SystemExit("apt listings JSON not found (expected data/apt-listings.json or data/apt-listings-s*.json)")
 
-          with path.open("r", encoding="utf-8") as f:
-              data = json.load(f)
+          raw_items = []
+          for src in source_files:
+              with src.open("r", encoding="utf-8") as f:
+                  loaded = json.load(f)
+              if not isinstance(loaded, list):
+                  raise SystemExit(f"{src} must be a JSON array")
+              raw_items.extend(x for x in loaded if isinstance(x, dict))
 
-          if not isinstance(data, list):
-              raise SystemExit("data/apt-listings.json must be a JSON array")
+          # articleNo 기준으로 병합 (updatedAt 최신값 우선)
+          merged_by_article = {}
+          no_key_items = []
+          for item in raw_items:
+              article_no = str(item.get("articleNo", "")).strip()
+              if not article_no:
+                  no_key_items.append(item)
+                  continue
+              prev = merged_by_article.get(article_no)
+              if prev is None or str(item.get("updatedAt", "")) >= str(prev.get("updatedAt", "")):
+                  merged_by_article[article_no] = item
+
+          data = list(merged_by_article.values()) + no_key_items
 
           region_filter = (os.getenv("REGION_FILTER") or "").strip()
 

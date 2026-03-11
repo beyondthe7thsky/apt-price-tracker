@@ -8,14 +8,28 @@ on:
     - cron: "30 4 * * 1-5"
   workflow_dispatch:
     inputs:
+      region_scope:
+        description: "실행할 지역 그룹"
+        required: false
+        default: "1) 수원시 (영통구, 광교, 화서)"
+        type: choice
+        options:
+          - "1) 수원시 (영통구, 광교, 화서)"
+          - "2) 용인시 수지구"
+          - "3) 서울 마용성"
+          - "4) 서울 서남권"
+          - "5) 서울 남부"
+          - "6) 서울 동부/서북권"
+          - "7) 성남 전역"
+          - "8) 안양권"
       max_regions_per_run:
         description: "수동 실행 시 수집할 최대 동 수 (기본 0=전체 실행)"
         required: false
         default: "0"
       start_region_offset:
-        description: "수동 실행 시 시작 동 오프셋 (기본 0)"
+        description: "수동 실행 시 시작 동 오프셋 (비우면 이전 진행 위치 이어받기)"
         required: false
-        default: "0"
+        default: ""
       max_complex_pages_on_overflow:
         description: "단지 매물량 많을 때 수집 최대 페이지 수 (기본 3, 권장 2~4)"
         required: false
@@ -35,12 +49,16 @@ on:
 
 jobs:
   run:
+    strategy:
+      fail-fast: false
+      matrix:
+        region_shard: ${{ fromJSON(github.event_name == 'schedule' && '[1,2,3,4,5,6,7,8]' || '[1]') }}
     runs-on: [self-hosted, macOS, ARM64]
     permissions:
       contents: write
     timeout-minutes: 180
     concurrency:
-      group: apt-price-bot
+      group: apt-price-bot-shard-${{ matrix.region_shard }}
       cancel-in-progress: false
     env:
       LANG: en_US.UTF-8
@@ -52,6 +70,8 @@ jobs:
       INPUT_START_OFFSET: ${{ github.event.inputs.start_region_offset || '' }}
       INPUT_MAX_COMPLEX_PAGES_ON_OVERFLOW: ${{ github.event.inputs.max_complex_pages_on_overflow || '' }}
       INPUT_MAX_COMPLEXES_PER_REGION: ${{ github.event.inputs.max_complexes_per_region || '' }}
+      INPUT_REGION_SCOPE: ${{ github.event.inputs.region_scope || '' }}
+      MATRIX_REGION_SHARD: ${{ matrix.region_shard }}
 
     steps:
       - name: Checkout
@@ -76,24 +96,59 @@ jobs:
       - name: Resolve run config
         run: |
           if [[ "${EVENT_NAME}" == "schedule" ]]; then
-            run_max="35"
+            run_shard="${MATRIX_REGION_SHARD:-1}"
+          else
+            run_scope="${INPUT_REGION_SCOPE:-1) 수원시 (영통구, 광교, 화서)}"
+            run_shard="$(echo "${run_scope}" | sed -E 's/^([0-9]+).*/\1/')"
+          fi
+
+          if ! [[ "${run_shard}" =~ ^[1-8]$ ]]; then
+            run_shard="1"
+          fi
+
+          case "${run_shard}" in
+            1) run_scope_label="수원시 (영통구, 광교, 화서)" ;;
+            2) run_scope_label="용인시 수지구" ;;
+            3) run_scope_label="서울 마용성" ;;
+            4) run_scope_label="서울 서남권" ;;
+            5) run_scope_label="서울 남부" ;;
+            6) run_scope_label="서울 동부/서북권" ;;
+            7) run_scope_label="성남 전역" ;;
+            8) run_scope_label="안양권" ;;
+            *) run_scope_label="수원시 (영통구, 광교, 화서)" ;;
+          esac
+
+          run_progress_file="data/run-progress-s${run_shard}.json"
+
+          if [[ "${EVENT_NAME}" == "schedule" ]]; then
+            run_max="0"
             run_overflow_pages="3"
             run_max_complexes="0"
             run_rotate="false"
             run_offset="0"
 
-            if [[ -f "data/run-progress.json" ]]; then
-              state_offset="$(python3 -c 'import json,pathlib; p=pathlib.Path("data/run-progress.json"); d=json.loads(p.read_text(encoding="utf-8")); print(int(d.get("nextStartRegionOffset",0)))' 2>/dev/null || echo 0)"
+            if [[ -f "${run_progress_file}" ]]; then
+              state_offset="$(python3 -c 'import json,pathlib,sys; p=pathlib.Path(sys.argv[1]); d=json.loads(p.read_text(encoding="utf-8")); print(int(d.get("nextStartRegionOffset",0)))' "${run_progress_file}" 2>/dev/null || echo 0)"
               if [[ "${state_offset}" =~ ^-?[0-9]+$ ]]; then
                 run_offset="${state_offset}"
               fi
             fi
           else
             run_max="${INPUT_MAX_REGIONS:-0}"
-            run_offset="${INPUT_START_OFFSET:-0}"
             run_overflow_pages="${INPUT_MAX_COMPLEX_PAGES_ON_OVERFLOW:-3}"
             run_max_complexes="${INPUT_MAX_COMPLEXES_PER_REGION:-0}"
             run_rotate="false"
+
+            run_offset="${INPUT_START_OFFSET:-}"
+            if [[ -z "${run_offset}" ]]; then
+              run_offset="0"
+              if [[ -f "${run_progress_file}" ]]; then
+                state_offset="$(python3 -c 'import json,pathlib,sys; p=pathlib.Path(sys.argv[1]); d=json.loads(p.read_text(encoding="utf-8")); print(int(d.get("nextStartRegionOffset",0)))' "${run_progress_file}" 2>/dev/null || echo 0)"
+                if [[ "${state_offset}" =~ ^-?[0-9]+$ ]]; then
+                  run_offset="${state_offset}"
+                fi
+              fi
+            fi
           fi
 
           echo "RUN_MAX_REGIONS=${run_max}" >> "$GITHUB_ENV"
@@ -101,13 +156,17 @@ jobs:
           echo "RUN_MAX_COMPLEX_PAGES_ON_OVERFLOW=${run_overflow_pages}" >> "$GITHUB_ENV"
           echo "RUN_MAX_COMPLEXES_PER_REGION=${run_max_complexes}" >> "$GITHUB_ENV"
           echo "RUN_ROTATE_BY_DAY=${run_rotate}" >> "$GITHUB_ENV"
-          echo "Resolved config: max=${run_max}, offset=${run_offset}, overflow_pages=${run_overflow_pages}, max_complexes=${run_max_complexes}, rotate=${run_rotate}, schedule=${EVENT_SCHEDULE}"
+          echo "RUN_REGION_SHARD=${run_shard}" >> "$GITHUB_ENV"
+          echo "RUN_REGION_SCOPE_LABEL=${run_scope_label}" >> "$GITHUB_ENV"
+          echo "RUN_PROGRESS_FILE=${run_progress_file}" >> "$GITHUB_ENV"
+          echo "Resolved config: shard=${run_shard} (${run_scope_label}), max=${run_max}, offset=${run_offset}, overflow_pages=${run_overflow_pages}, max_complexes=${run_max_complexes}, rotate=${run_rotate}, schedule=${EVENT_SCHEDULE}, progress_file=${run_progress_file}"
 
       - name: Run bot
         env:
           BOT_SAFE_MAX_REGIONS_PER_RUN: ${{ env.RUN_MAX_REGIONS }}
           BOT_SAFE_START_REGION_OFFSET: ${{ env.RUN_START_OFFSET }}
           BOT_SAFE_ROTATE_START_BY_DAY: ${{ env.RUN_ROTATE_BY_DAY }}
+          BOT_SAFE_REGION_SHARD: ${{ env.RUN_REGION_SHARD }}
           NAVER_SAFE_MAX_COMPLEX_PAGES_ON_OVERFLOW: ${{ env.RUN_MAX_COMPLEX_PAGES_ON_OVERFLOW }}
           NAVER_SAFE_MAX_COMPLEXES_PER_REGION: ${{ env.RUN_MAX_COMPLEXES_PER_REGION }}
         run: ./gradlew --no-daemon bootRun
@@ -116,15 +175,19 @@ jobs:
         if: ${{ always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.commit_data != 'false')) }}
         run: |
           BRANCH="${GITHUB_REF_NAME:-main}"
+          shopt -s nullglob
+          files=(data/apt-listings*.json data/run-progress*.json)
+          shopt -u nullglob
 
-          if [[ -n "$(git status --porcelain data/apt-listings.json data/run-progress.json)" ]]; then
+          if (( ${#files[@]} > 0 )) && [[ -n "$(git status --porcelain -- "${files[@]}")" ]]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add data/apt-listings.json
-            if [[ -f "data/run-progress.json" ]]; then
-              git add data/run-progress.json
+            git add "${files[@]}"
+            if git diff --cached --quiet; then
+              echo "No data changes to commit."
+              exit 0
             fi
-            git commit -m "chore: update apt listings [skip ci]"
+            git commit -m "chore: update apt listings shard ${RUN_REGION_SHARD} [skip ci]"
 
             pushed="false"
             for attempt in 1 2 3; do
