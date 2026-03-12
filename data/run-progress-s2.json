@@ -1,8 +1,8 @@
 {
-  "nextStartRegionOffset" : 1,
+  "nextStartRegionOffset" : 0,
   "totalRegions" : 6,
-  "lastRunAt" : "2026-03-12T09:17:57.434859",
-  "lastRegionName" : "용인수지_죽전동",
-  "reason" : "ABUSE_ABORTED",
-  "blockedRegionName" : "용인수지_죽전동"
+  "lastRunAt" : "2026-03-12T10:39:12.823394",
+  "lastRegionName" : "용인수지_상현동",
+  "reason" : "SUCCESS",
+  "blockedRegionName" : null
 }
