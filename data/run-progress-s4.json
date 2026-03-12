@@ -1,8 +1,8 @@
 {
   "nextStartRegionOffset" : 0,
   "totalRegions" : 8,
-  "lastRunAt" : "2026-03-12T09:19:16.648051",
-  "lastRegionName" : "서울양천_목동",
-  "reason" : "ABUSE_ABORTED",
-  "blockedRegionName" : "서울양천_목동"
+  "lastRunAt" : "2026-03-12T12:58:10.996901",
+  "lastRegionName" : "서울영등포_여의도동",
+  "reason" : "SUCCESS",
+  "blockedRegionName" : null
 }
