@@ -577,8 +577,7 @@ jobs:
               .stat:nth-child(5) .v{color:#0891b2}
               .stat:nth-child(6) .v{color:#b45309}
               .stat:nth-child(7) .v{color:#374151}
-              .region{--accent:#475569;background:var(--card);border:1px solid #d8e3f2;border-left:6px solid var(--accent);border-radius:18px;margin-bottom:14px;overflow:hidden;box-shadow:0 14px 30px rgba(15,23,42,.10);animation:regionIn .28s ease both;animation-delay:var(--delay,0ms)}
-              @keyframes regionIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+              .region{--accent:#475569;background:var(--card);border:1px solid #d8e3f2;border-left:6px solid var(--accent);border-radius:18px;margin-bottom:14px;overflow:hidden;box-shadow:0 14px 30px rgba(15,23,42,.10);transition:box-shadow .16s ease,transform .16s ease;opacity:1;transform:none;backface-visibility:hidden;-webkit-backface-visibility:hidden}
               .head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,rgba(37,99,235,.14) 0%,rgba(255,255,255,.98) 64%);cursor:pointer}
               .head:hover{background:linear-gradient(90deg,rgba(37,99,235,.22) 0%,rgba(255,255,255,1) 66%)}
               .head:focus-visible{outline:2px solid #2563eb;outline-offset:-2px}
@@ -596,7 +595,7 @@ jobs:
               .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;background:linear-gradient(180deg,#ffffff 0%,#fbfdff 100%);border-top:1px solid #e4ecf8}
               table{width:100%;min-width:1700px;border-collapse:collapse;font-size:15px}
               th,td{border-bottom:1px solid #edf1f7;padding:10px 12px;text-align:left;vertical-align:top}
-              th{background:linear-gradient(180deg,#edf5ff 0%,#e8f1ff 100%);color:#334155;position:sticky;top:0;z-index:2;font-weight:800;backdrop-filter:blur(3px)}
+              th{background:linear-gradient(180deg,#edf5ff 0%,#e8f1ff 100%);color:#334155;position:sticky;top:0;z-index:2;font-weight:800}
               @media (min-width:901px){
                 th:first-child{
                   left:0;
@@ -888,6 +887,19 @@ jobs:
                 if(collapsedRegions.has(regionName)) collapsedRegions.delete(regionName);
                 else collapsedRegions.add(regionName);
               }
+              function renderPreservingScroll(previousY){
+                render();
+                const restoreY=typeof previousY==='number' ? previousY : window.scrollY;
+                requestAnimationFrame(()=>{
+                  const maxY=Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+                  window.scrollTo(0, Math.min(restoreY, maxY));
+                });
+              }
+              function forceRepaintRegions(){
+                regionsEl.style.transform='translateZ(0)';
+                void regionsEl.offsetHeight;
+                requestAnimationFrame(()=>{ regionsEl.style.transform=''; });
+              }
               function render(){
                 updateActiveFilterBar();
                 const rows=sortRows(filtered());
@@ -902,7 +914,11 @@ jobs:
                 sBargain.textContent=String(rows.filter(x=>x.signal==='급매').length);
                 sCheap.textContent=String(rows.filter(x=>x.signal==='저렴').length);
 
-                if(!rows.length){regionsEl.innerHTML='<div class="empty">조건에 맞는 데이터가 없습니다.</div>';return;}
+                if(!rows.length){
+                  regionsEl.innerHTML='<div class="empty">조건에 맞는 데이터가 없습니다.</div>';
+                  forceRepaintRegions();
+                  return;
+                }
                 const entries=[...g.entries()];
                 const visibleEntries=entries.slice(0, visibleRegionBlocks);
                 const hiddenRegions=entries.length-visibleEntries.length;
@@ -938,6 +954,7 @@ jobs:
                   const contentHtml = collapsed ? '' : `<div class="table-wrap"><table><thead>${headerHtml}</thead><tbody>${rowsHtml}</tbody></table></div>${footerHtml}`;
                   return `<section class="region ${collapsed ? 'collapsed' : ''}" style="--accent:${accent};--delay:${Math.min(idx*18,180)}ms;"><div class="head" data-role="region-head" data-region-key="${regionKey}" role="button" tabindex="0" aria-expanded="${collapsed ? 'false' : 'true'}"><div class="title-wrap"><span class="collapse-caret">${caret}</span><div class="title">${esc(name)} <span style="color:#64748b;font-size:13px;">(${items.length}건)</span></div><span class="collapse-label">${collapseLabel}</span></div><div class="chips">${chips}</div></div>${contentHtml}</section>`;
                 }).join('') + (hiddenRegions>0 ? `<div class="list-footer"><button type="button" class="load-more" data-role="load-more-regions">+ 지역 ${Math.min(REGION_BLOCK_STEP, hiddenRegions)}개 더보기 (남은 ${hiddenRegions}개)</button></div><div class="hint">모바일/저사양 브라우저 안정성을 위해 지역별로 나눠 렌더링합니다.</div>` : '');
+                forceRepaintRegions();
               }
 
               activeFilterBar.addEventListener('click',(event)=>{
@@ -988,16 +1005,18 @@ jobs:
                 }
                 const loadRegionBtn=event.target.closest('button[data-role=\"load-more-regions\"]');
                 if(loadRegionBtn){
+                  const previousY=window.scrollY;
                   visibleRegionBlocks += REGION_BLOCK_STEP;
-                  render();
+                  renderPreservingScroll(previousY);
                   return;
                 }
                 const loadMoreBtn=event.target.closest('button.load-more');
                 if(loadMoreBtn){
+                  const previousY=window.scrollY;
                   const key=decodeURIComponent(loadMoreBtn.dataset.regionKey || '');
                   const current=regionVisible.get(key) || REGION_INITIAL_ROWS;
                   regionVisible.set(key, current + REGION_ROWS_STEP);
-                  render();
+                  renderPreservingScroll(previousY);
                   return;
                 }
                 const th=event.target.closest('th[data-sort]');
