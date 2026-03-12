@@ -56,34 +56,6 @@ on:
         description: "실행 최대 시간(분). 도달 시 안전 종료 후 다음 오프셋 저장 (기본 165)"
         required: false
         default: "165"
-      auto_continue_on_time_budget:
-        description: "시간 예산으로 종료되면 자동으로 다음 실행 이어받기"
-        required: false
-        default: "true"
-        type: choice
-        options:
-          - "true"
-          - "false"
-      continue_chain_left:
-        description: "자동 이어받기 남은 횟수 (기본 3)"
-        required: false
-        default: "3"
-      parallel_mode:
-        description: "지역 그룹 1~9를 병렬 실행 (수동 실행 전용)"
-        required: false
-        default: "false"
-        type: choice
-        options:
-          - "false"
-          - "true"
-      auto_continue_next_region_scope:
-        description: "현재 지역 그룹 종료 후 다음 지역 그룹으로 자동 이어가기 (1→2→...→9)"
-        required: false
-        default: "true"
-        type: choice
-        options:
-          - "true"
-          - "false"
       commit_data:
         description: "data/apt-listings*.json 변경분 자동 커밋 여부"
         required: false
@@ -96,10 +68,8 @@ on:
 jobs:
   run:
     strategy:
-      fail-fast: false
-      max-parallel: 1
       matrix:
-        region_shard: ${{ fromJSON((github.event_name == 'schedule' || github.event.inputs.parallel_mode == 'true') && '[1,2,3,4,5,6,7,8,9]' || '[1]') }}
+        region_shard: [1]
     runs-on: [self-hosted, macOS, ARM64]
     permissions:
       actions: write
@@ -121,10 +91,6 @@ jobs:
       INPUT_MAX_OVERFLOW_COMPLEXES_PER_REGION: ${{ github.event.inputs.max_overflow_complexes_per_region || '' }}
       INPUT_ARTICLE_ORDER: ${{ github.event.inputs.article_order || '' }}
       INPUT_MAX_RUN_MINUTES: ${{ github.event.inputs.max_run_minutes || '' }}
-      INPUT_AUTO_CONTINUE_ON_TIME_BUDGET: ${{ github.event.inputs.auto_continue_on_time_budget || '' }}
-      INPUT_CONTINUE_CHAIN_LEFT: ${{ github.event.inputs.continue_chain_left || '' }}
-      INPUT_PARALLEL_MODE: ${{ github.event.inputs.parallel_mode || '' }}
-      INPUT_AUTO_CONTINUE_NEXT_REGION_SCOPE: ${{ github.event.inputs.auto_continue_next_region_scope || '' }}
       INPUT_COMMIT_DATA: ${{ github.event.inputs.commit_data || '' }}
       INPUT_REGION_SCOPE: ${{ github.event.inputs.region_scope || '' }}
       MATRIX_REGION_SHARD: ${{ matrix.region_shard }}
@@ -167,19 +133,8 @@ jobs:
 
       - name: Resolve run config
         run: |
-          parallel_mode="${INPUT_PARALLEL_MODE:-false}"
-          if [[ "${parallel_mode}" != "true" ]]; then
-            parallel_mode="false"
-          fi
-
-          if [[ "${EVENT_NAME}" == "schedule" ]]; then
-            run_shard="${MATRIX_REGION_SHARD:-1}"
-          elif [[ "${parallel_mode}" == "true" ]]; then
-            run_shard="${MATRIX_REGION_SHARD:-1}"
-          else
-            run_scope="${INPUT_REGION_SCOPE:-1) 수원시 (영통구, 광교, 화서)}"
-            run_shard="$(echo "${run_scope}" | sed -E 's/^([0-9]+).*/\1/')"
-          fi
+          run_scope="${INPUT_REGION_SCOPE:-1) 수원시 (영통구, 광교, 화서)}"
+          run_shard="$(echo "${run_scope}" | sed -E 's/^([0-9]+).*/\1/')"
 
           if ! [[ "${run_shard}" =~ ^[1-9]$ ]]; then
             run_shard="1"
@@ -228,15 +183,9 @@ jobs:
             run_article_order="${INPUT_ARTICLE_ORDER:-prc}"
             run_max_minutes="${INPUT_MAX_RUN_MINUTES:-165}"
             run_rotate="false"
-            if [[ "${parallel_mode}" == "true" ]]; then
-              run_auto_continue="false"
-              run_chain_left="0"
-              run_auto_continue_next_scope="false"
-            else
-              run_auto_continue="${INPUT_AUTO_CONTINUE_ON_TIME_BUDGET:-true}"
-              run_chain_left="${INPUT_CONTINUE_CHAIN_LEFT:-3}"
-              run_auto_continue_next_scope="${INPUT_AUTO_CONTINUE_NEXT_REGION_SCOPE:-true}"
-            fi
+            run_auto_continue="false"
+            run_chain_left="0"
+            run_auto_continue_next_scope="false"
             run_commit_data="${INPUT_COMMIT_DATA:-true}"
 
             run_offset="${INPUT_START_OFFSET:-}"
@@ -249,18 +198,6 @@ jobs:
                 fi
               fi
             fi
-          fi
-
-          if ! [[ "${run_chain_left}" =~ ^[0-9]+$ ]]; then
-            run_chain_left="0"
-          fi
-
-          if [[ "${run_auto_continue}" != "true" ]]; then
-            run_auto_continue="false"
-          fi
-
-          if [[ "${run_auto_continue_next_scope}" != "true" ]]; then
-            run_auto_continue_next_scope="false"
           fi
 
           if [[ "${run_commit_data}" != "true" ]]; then
@@ -292,13 +229,13 @@ jobs:
           echo "RUN_CONTINUE_CHAIN_LEFT=${run_chain_left}" >> "$GITHUB_ENV"
           echo "RUN_AUTO_CONTINUE_NEXT_REGION_SCOPE=${run_auto_continue_next_scope}" >> "$GITHUB_ENV"
           echo "RUN_COMMIT_DATA=${run_commit_data}" >> "$GITHUB_ENV"
-          echo "RUN_PARALLEL_MODE=${parallel_mode}" >> "$GITHUB_ENV"
+          echo "RUN_PARALLEL_MODE=false" >> "$GITHUB_ENV"
           echo "RUN_ROTATE_BY_DAY=${run_rotate}" >> "$GITHUB_ENV"
           echo "RUN_REGION_SHARD=${run_shard}" >> "$GITHUB_ENV"
           echo "RUN_REGION_SCOPE_LABEL=${run_scope_label}" >> "$GITHUB_ENV"
           echo "RUN_REGION_SCOPE_INPUT=${run_scope_input}" >> "$GITHUB_ENV"
           echo "RUN_PROGRESS_FILE=${run_progress_file}" >> "$GITHUB_ENV"
-          echo "Resolved config: shard=${run_shard} (${run_scope_label}), max=${run_max}, offset=${run_offset}, overflow_pages=${run_overflow_pages}, max_complexes=${run_max_complexes}, max_overflow_complexes=${run_max_overflow_complexes}, article_order=${run_article_order}, max_run_minutes=${run_max_minutes}, auto_continue=${run_auto_continue}, chain_left=${run_chain_left}, auto_continue_next_scope=${run_auto_continue_next_scope}, commit_data=${run_commit_data}, parallel_mode=${parallel_mode}, rotate=${run_rotate}, schedule=${EVENT_SCHEDULE}, progress_file=${run_progress_file}"
+          echo "Resolved config: shard=${run_shard} (${run_scope_label}), max=${run_max}, offset=${run_offset}, overflow_pages=${run_overflow_pages}, max_complexes=${run_max_complexes}, max_overflow_complexes=${run_max_overflow_complexes}, article_order=${run_article_order}, max_run_minutes=${run_max_minutes}, auto_continue=false, chain_left=0, auto_continue_next_scope=false, commit_data=${run_commit_data}, parallel_mode=false, rotate=${run_rotate}, schedule=${EVENT_SCHEDULE}, progress_file=${run_progress_file}"
 
       - name: Run bot
         env:
@@ -354,106 +291,3 @@ jobs:
           else
             echo "No data changes to commit."
           fi
-
-      - name: Read run progress reason
-        id: progress
-        if: ${{ always() }}
-        run: |
-          reason=""
-          next_offset=""
-          if [[ -f "${RUN_PROGRESS_FILE}" ]]; then
-            reason="$(python3 -c 'import json,pathlib,sys; p=pathlib.Path(sys.argv[1]); d=json.loads(p.read_text(encoding="utf-8")); print(d.get("reason",""))' "${RUN_PROGRESS_FILE}" 2>/dev/null || true)"
-            next_offset="$(python3 -c 'import json,pathlib,sys; p=pathlib.Path(sys.argv[1]); d=json.loads(p.read_text(encoding="utf-8")); print(d.get("nextStartRegionOffset",""))' "${RUN_PROGRESS_FILE}" 2>/dev/null || true)"
-          fi
-          chain_left="${RUN_CONTINUE_CHAIN_LEFT:-0}"
-          if ! [[ "${chain_left}" =~ ^[0-9]+$ ]]; then
-            chain_left="0"
-          fi
-          if [[ "${chain_left}" -gt 0 ]]; then
-            next_chain_left="$((chain_left - 1))"
-          else
-            next_chain_left="0"
-          fi
-          echo "reason=${reason}" >> "$GITHUB_OUTPUT"
-          echo "next_offset=${next_offset}" >> "$GITHUB_OUTPUT"
-          echo "chain_left=${chain_left}" >> "$GITHUB_OUTPUT"
-          echo "next_chain_left=${next_chain_left}" >> "$GITHUB_OUTPUT"
-          echo "Run progress reason=${reason}, nextOffset=${next_offset}, chain_left=${chain_left}, next_chain_left=${next_chain_left}"
-
-      - name: Auto-dispatch follow-up run
-        if: ${{ success() && github.event_name == 'workflow_dispatch' && env.RUN_PARALLEL_MODE != 'true' && env.RUN_AUTO_CONTINUE_ON_TIME_BUDGET == 'true' && startsWith(steps.progress.outputs.reason, 'TIME_BUDGET') && steps.progress.outputs.chain_left != '0' && env.RUN_COMMIT_DATA == 'true' }}
-        uses: actions/github-script@v7
-        env:
-          NEXT_CONTINUE_CHAIN_LEFT: ${{ steps.progress.outputs.next_chain_left }}
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: "apt-price-bot.yml",
-              ref: context.ref.replace("refs/heads/", ""),
-              inputs: {
-                region_scope: process.env.RUN_REGION_SCOPE_INPUT,
-                max_regions_per_run: process.env.RUN_MAX_REGIONS,
-                start_region_offset: "",
-                max_complex_pages_on_overflow: process.env.RUN_MAX_COMPLEX_PAGES_ON_OVERFLOW,
-                max_complexes_per_region: process.env.RUN_MAX_COMPLEXES_PER_REGION,
-                max_overflow_complexes_per_region: process.env.RUN_MAX_OVERFLOW_COMPLEXES_PER_REGION,
-                article_order: process.env.RUN_ARTICLE_ORDER,
-                max_run_minutes: process.env.RUN_MAX_RUN_MINUTES,
-                auto_continue_on_time_budget: process.env.RUN_AUTO_CONTINUE_ON_TIME_BUDGET,
-                continue_chain_left: process.env.NEXT_CONTINUE_CHAIN_LEFT,
-                auto_continue_next_region_scope: process.env.RUN_AUTO_CONTINUE_NEXT_REGION_SCOPE,
-                commit_data: process.env.RUN_COMMIT_DATA
-              }
-            });
-            core.info(`Dispatched follow-up run (chain left: ${process.env.NEXT_CONTINUE_CHAIN_LEFT})`);
-
-      - name: Auto-dispatch next region scope
-        if: ${{ success() && github.event_name == 'workflow_dispatch' && env.RUN_PARALLEL_MODE != 'true' && env.RUN_AUTO_CONTINUE_NEXT_REGION_SCOPE == 'true' && env.RUN_COMMIT_DATA == 'true' && !startsWith(steps.progress.outputs.reason, 'TIME_BUDGET') && env.RUN_REGION_SHARD != '9' }}
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const currentShard = Number(process.env.RUN_REGION_SHARD || "0");
-            const nextShard = currentShard + 1;
-            const scopeByShard = {
-              1: "1) 수원시 (영통구, 광교, 화서)",
-              2: "2) 용인시 수지구",
-              3: "3) 서울 마용성",
-              4: "4) 서울 서남권",
-              5: "5) 서울 남부",
-              6: "6) 서울 동부/서북권",
-              7: "7) 성남 전역",
-              8: "8) 안양권",
-              9: "9) 서울 강남3구"
-            };
-            const nextScope = scopeByShard[nextShard];
-            if (!nextScope) {
-              core.info(`No next scope for shard=${currentShard}. Skipping.`);
-              return;
-            }
-
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: "apt-price-bot.yml",
-              ref: context.ref.replace("refs/heads/", ""),
-              inputs: {
-                region_scope: nextScope,
-                max_regions_per_run: process.env.RUN_MAX_REGIONS,
-                start_region_offset: "",
-                max_complex_pages_on_overflow: process.env.RUN_MAX_COMPLEX_PAGES_ON_OVERFLOW,
-                max_complexes_per_region: process.env.RUN_MAX_COMPLEXES_PER_REGION,
-                max_overflow_complexes_per_region: process.env.RUN_MAX_OVERFLOW_COMPLEXES_PER_REGION,
-                article_order: process.env.RUN_ARTICLE_ORDER,
-                max_run_minutes: process.env.RUN_MAX_RUN_MINUTES,
-                auto_continue_on_time_budget: process.env.RUN_AUTO_CONTINUE_ON_TIME_BUDGET,
-                continue_chain_left: process.env.RUN_CONTINUE_CHAIN_LEFT,
-                parallel_mode: "false",
-                auto_continue_next_region_scope: process.env.RUN_AUTO_CONTINUE_NEXT_REGION_SCOPE,
-                commit_data: process.env.RUN_COMMIT_DATA
-              }
-            });
-            core.info(`Dispatched next region scope: ${nextScope}`);
