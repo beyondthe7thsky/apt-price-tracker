@@ -1,8 +1,8 @@
 {
   "nextStartRegionOffset" : 0,
   "totalRegions" : 9,
-  "lastRunAt" : "2026-03-12T09:18:13.843304",
-  "lastRegionName" : "서울마포_아현동",
-  "reason" : "ABUSE_ABORTED",
-  "blockedRegionName" : "서울마포_아현동"
+  "lastRunAt" : "2026-03-12T11:27:47.829240",
+  "lastRegionName" : "서울용산_이촌동",
+  "reason" : "SUCCESS",
+  "blockedRegionName" : null
 }
