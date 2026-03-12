@@ -1,8 +1,8 @@
 {
-  "nextStartRegionOffset" : 1,
+  "nextStartRegionOffset" : 2,
   "totalRegions" : 7,
-  "lastRunAt" : "2026-03-12T08:06:40.269940",
-  "lastRegionName" : "수원_영통동",
+  "lastRunAt" : "2026-03-12T09:17:45.150561",
+  "lastRegionName" : "수원_망포동",
   "reason" : "ABUSE_ABORTED",
-  "blockedRegionName" : "수원_영통동"
+  "blockedRegionName" : "수원_망포동"
 }
