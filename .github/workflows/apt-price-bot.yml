@@ -39,6 +39,19 @@ on:
         description: "지역별 수집 최대 단지 수 (기본 0=전체, 권장 15~30)"
         required: false
         default: "0"
+      max_overflow_complexes_per_region:
+        description: "페이지 확장(overflow) 허용 단지 수 상한 (기본 4, 0=무제한)"
+        required: false
+        default: "4"
+      article_order:
+        description: "매물 정렬 요청 순서 (기본 prc, prc,date는 요청량 증가)"
+        required: false
+        default: "prc"
+        type: choice
+        options:
+          - "prc"
+          - "prc,date"
+          - "date"
       max_run_minutes:
         description: "실행 최대 시간(분). 도달 시 안전 종료 후 다음 오프셋 저장 (기본 165)"
         required: false
@@ -76,7 +89,7 @@ jobs:
   run:
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 1
       matrix:
         region_shard: ${{ fromJSON((github.event_name == 'schedule' || github.event.inputs.parallel_mode == 'true') && '[1,2,3,4,5,6,7,8,9]' || '[1]') }}
     runs-on: [self-hosted, macOS, ARM64]
@@ -97,6 +110,8 @@ jobs:
       INPUT_START_OFFSET: ${{ github.event.inputs.start_region_offset || '' }}
       INPUT_MAX_COMPLEX_PAGES_ON_OVERFLOW: ${{ github.event.inputs.max_complex_pages_on_overflow || '' }}
       INPUT_MAX_COMPLEXES_PER_REGION: ${{ github.event.inputs.max_complexes_per_region || '' }}
+      INPUT_MAX_OVERFLOW_COMPLEXES_PER_REGION: ${{ github.event.inputs.max_overflow_complexes_per_region || '' }}
+      INPUT_ARTICLE_ORDER: ${{ github.event.inputs.article_order || '' }}
       INPUT_MAX_RUN_MINUTES: ${{ github.event.inputs.max_run_minutes || '' }}
       INPUT_AUTO_CONTINUE_ON_TIME_BUDGET: ${{ github.event.inputs.auto_continue_on_time_budget || '' }}
       INPUT_CONTINUE_CHAIN_LEFT: ${{ github.event.inputs.continue_chain_left || '' }}
@@ -180,6 +195,8 @@ jobs:
             run_max="0"
             run_overflow_pages="3"
             run_max_complexes="0"
+            run_max_overflow_complexes="4"
+            run_article_order="prc"
             run_max_minutes="165"
             run_rotate="false"
             run_offset="0"
@@ -197,6 +214,8 @@ jobs:
             run_max="${INPUT_MAX_REGIONS:-0}"
             run_overflow_pages="${INPUT_MAX_COMPLEX_PAGES_ON_OVERFLOW:-3}"
             run_max_complexes="${INPUT_MAX_COMPLEXES_PER_REGION:-0}"
+            run_max_overflow_complexes="${INPUT_MAX_OVERFLOW_COMPLEXES_PER_REGION:-4}"
+            run_article_order="${INPUT_ARTICLE_ORDER:-prc}"
             run_max_minutes="${INPUT_MAX_RUN_MINUTES:-165}"
             run_rotate="false"
             if [[ "${parallel_mode}" == "true" ]]; then
@@ -232,6 +251,15 @@ jobs:
             run_commit_data="false"
           fi
 
+          if ! [[ "${run_max_overflow_complexes}" =~ ^-?[0-9]+$ ]]; then
+            run_max_overflow_complexes="4"
+          fi
+
+          case "${run_article_order}" in
+            prc|date|prc,date) ;;
+            *) run_article_order="prc" ;;
+          esac
+
           if [[ "${run_auto_continue}" == "true" && "${run_commit_data}" != "true" ]]; then
             echo "auto-continue requires commit_data=true. Disabling auto-continue for this run."
             run_auto_continue="false"
@@ -241,6 +269,8 @@ jobs:
           echo "RUN_START_OFFSET=${run_offset}" >> "$GITHUB_ENV"
           echo "RUN_MAX_COMPLEX_PAGES_ON_OVERFLOW=${run_overflow_pages}" >> "$GITHUB_ENV"
           echo "RUN_MAX_COMPLEXES_PER_REGION=${run_max_complexes}" >> "$GITHUB_ENV"
+          echo "RUN_MAX_OVERFLOW_COMPLEXES_PER_REGION=${run_max_overflow_complexes}" >> "$GITHUB_ENV"
+          echo "RUN_ARTICLE_ORDER=${run_article_order}" >> "$GITHUB_ENV"
           echo "RUN_MAX_RUN_MINUTES=${run_max_minutes}" >> "$GITHUB_ENV"
           echo "RUN_AUTO_CONTINUE_ON_TIME_BUDGET=${run_auto_continue}" >> "$GITHUB_ENV"
           echo "RUN_CONTINUE_CHAIN_LEFT=${run_chain_left}" >> "$GITHUB_ENV"
@@ -251,7 +281,7 @@ jobs:
           echo "RUN_REGION_SCOPE_LABEL=${run_scope_label}" >> "$GITHUB_ENV"
           echo "RUN_REGION_SCOPE_INPUT=${run_scope_input}" >> "$GITHUB_ENV"
           echo "RUN_PROGRESS_FILE=${run_progress_file}" >> "$GITHUB_ENV"
-          echo "Resolved config: shard=${run_shard} (${run_scope_label}), max=${run_max}, offset=${run_offset}, overflow_pages=${run_overflow_pages}, max_complexes=${run_max_complexes}, max_run_minutes=${run_max_minutes}, auto_continue=${run_auto_continue}, chain_left=${run_chain_left}, commit_data=${run_commit_data}, parallel_mode=${parallel_mode}, rotate=${run_rotate}, schedule=${EVENT_SCHEDULE}, progress_file=${run_progress_file}"
+          echo "Resolved config: shard=${run_shard} (${run_scope_label}), max=${run_max}, offset=${run_offset}, overflow_pages=${run_overflow_pages}, max_complexes=${run_max_complexes}, max_overflow_complexes=${run_max_overflow_complexes}, article_order=${run_article_order}, max_run_minutes=${run_max_minutes}, auto_continue=${run_auto_continue}, chain_left=${run_chain_left}, commit_data=${run_commit_data}, parallel_mode=${parallel_mode}, rotate=${run_rotate}, schedule=${EVENT_SCHEDULE}, progress_file=${run_progress_file}"
 
       - name: Run bot
         env:
@@ -262,6 +292,8 @@ jobs:
           BOT_SAFE_MAX_RUN_MINUTES: ${{ env.RUN_MAX_RUN_MINUTES }}
           NAVER_SAFE_MAX_COMPLEX_PAGES_ON_OVERFLOW: ${{ env.RUN_MAX_COMPLEX_PAGES_ON_OVERFLOW }}
           NAVER_SAFE_MAX_COMPLEXES_PER_REGION: ${{ env.RUN_MAX_COMPLEXES_PER_REGION }}
+          NAVER_SAFE_MAX_OVERFLOW_COMPLEXES_PER_REGION: ${{ env.RUN_MAX_OVERFLOW_COMPLEXES_PER_REGION }}
+          NAVER_SAFE_ARTICLE_ORDER: ${{ env.RUN_ARTICLE_ORDER }}
         run: ./gradlew --no-daemon bootRun
 
       - name: Commit updated data
@@ -350,6 +382,8 @@ jobs:
                 start_region_offset: "",
                 max_complex_pages_on_overflow: process.env.RUN_MAX_COMPLEX_PAGES_ON_OVERFLOW,
                 max_complexes_per_region: process.env.RUN_MAX_COMPLEXES_PER_REGION,
+                max_overflow_complexes_per_region: process.env.RUN_MAX_OVERFLOW_COMPLEXES_PER_REGION,
+                article_order: process.env.RUN_ARTICLE_ORDER,
                 max_run_minutes: process.env.RUN_MAX_RUN_MINUTES,
                 auto_continue_on_time_budget: process.env.RUN_AUTO_CONTINUE_ON_TIME_BUDGET,
                 continue_chain_left: process.env.NEXT_CONTINUE_CHAIN_LEFT,
