@@ -1,8 +1,8 @@
 {
-  "nextStartRegionOffset" : 0,
+  "nextStartRegionOffset" : 5,
   "totalRegions" : 8,
-  "lastRunAt" : "2026-03-12T09:18:40.869685",
-  "lastRegionName" : "서울동작_흑석동",
+  "lastRunAt" : "2026-03-12T13:38:18.014031",
+  "lastRegionName" : "서울구로_구로동",
   "reason" : "ABUSE_ABORTED",
-  "blockedRegionName" : "서울동작_흑석동"
+  "blockedRegionName" : "서울구로_구로동"
 }
