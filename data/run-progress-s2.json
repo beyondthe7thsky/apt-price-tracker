@@ -1,8 +1,8 @@
 {
-  "nextStartRegionOffset" : 0,
+  "nextStartRegionOffset" : 1,
   "totalRegions" : 6,
-  "lastRunAt" : "2026-03-12T08:07:02.171745",
-  "lastRegionName" : "용인수지_풍덕천동",
+  "lastRunAt" : "2026-03-12T09:17:57.434859",
+  "lastRegionName" : "용인수지_죽전동",
   "reason" : "ABUSE_ABORTED",
-  "blockedRegionName" : "용인수지_풍덕천동"
+  "blockedRegionName" : "용인수지_죽전동"
 }
