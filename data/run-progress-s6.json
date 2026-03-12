@@ -1,8 +1,8 @@
 {
-  "nextStartRegionOffset" : 7,
+  "nextStartRegionOffset" : 0,
   "totalRegions" : 32,
-  "lastRunAt" : "2026-03-12T14:17:16.420851",
-  "lastRegionName" : "서울동대문_전농동",
-  "reason" : "ABUSE_ABORTED",
-  "blockedRegionName" : "서울동대문_전농동"
+  "lastRunAt" : "2026-03-12T15:37:50.323133",
+  "lastRegionName" : "서울은평_응암동",
+  "reason" : "SUCCESS",
+  "blockedRegionName" : null
 }
