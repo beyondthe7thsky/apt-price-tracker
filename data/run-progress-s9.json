@@ -1,8 +1,8 @@
 {
-  "nextStartRegionOffset" : 0,
+  "nextStartRegionOffset" : 24,
   "totalRegions" : 37,
-  "lastRunAt" : "2026-03-12T14:18:44.438888",
-  "lastRegionName" : "서울강남_역삼동",
+  "lastRunAt" : "2026-03-13T09:37:40.466820",
+  "lastRegionName" : "서울송파_잠실동",
   "reason" : "ABUSE_ABORTED",
-  "blockedRegionName" : "서울강남_역삼동"
+  "blockedRegionName" : "서울송파_잠실동"
 }
