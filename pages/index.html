@@ -315,7 +315,29 @@
       font-size: 14px;
       color: #64748b;
       font-weight: 700;
-      margin-bottom: 8px
+      margin-bottom: 0
+    }
+
+    .filter-panel-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:10px
+    }
+
+    .filter-auto-note{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      border:1px solid #bfdbfe;
+      background:linear-gradient(180deg,#f8fbff 0%,#eef6ff 100%);
+      color:#1d4ed8;
+      border-radius:999px;
+      padding:6px 10px;
+      font-size:12px;
+      font-weight:800;
+      white-space:nowrap
     }
 
     .filter-row {
@@ -340,16 +362,32 @@
 
     .filter-row button {
       cursor: pointer;
-      background: var(--brand);
-      color: #fff;
-      border-color: var(--brand);
-      font-weight: 700;
+      font-weight: 800;
       transition: transform .12s ease, box-shadow .12s ease;
     }
 
     .filter-row button:hover {
       transform: translateY(-1px);
-      box-shadow: 0 6px 14px rgba(15, 23, 42, .2)
+      box-shadow: 0 6px 14px rgba(15, 23, 42, .12)
+    }
+
+    .reset-btn{
+      background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);
+      color:#475569;
+      border-color:#cbd5e1;
+      box-shadow:none;
+    }
+
+    .reset-btn:hover{
+      background:linear-gradient(180deg,#fff7f7 0%,#fef2f2 100%);
+      border-color:#fda4af;
+      color:#be123c;
+    }
+
+    .reset-btn::before{
+      content:"↺";
+      margin-right:6px;
+      font-weight:900;
     }
 
     #city, #region {
@@ -690,6 +728,11 @@
         grid-template-columns:1fr
       }
 
+      .filter-panel-head{
+        flex-direction:column;
+        align-items:flex-start;
+      }
+
       .filter-row {
         grid-template-columns:1fr
       }
@@ -757,7 +800,10 @@
         </section>
       </div>
       <section class="filter-panel">
-        <div class="filter-title">상세 필터</div>
+        <div class="filter-panel-head">
+          <div class="filter-title">상세 필터</div>
+          <div class="filter-auto-note">변경 즉시 자동 적용</div>
+        </div>
         <div class="filter-row">
           <select id="priceBand">
             <option value="">가격대(전체)</option>
@@ -784,7 +830,7 @@
             <option>다시 등록된 매물(판매중)</option>
           </select>
           <input id="q" placeholder="지역/단지명 검색"/>
-          <button id="resetBtn">필터 초기화</button>
+          <button id="resetBtn" class="reset-btn" type="button" title="모든 필터를 한 번에 지웁니다">전체 초기화</button>
         </div>
       </section>
       <div id="activeFilterBar" class="active-filters" hidden></div>
