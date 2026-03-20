@@ -1,8 +1,8 @@
 {
-  "nextStartRegionOffset" : 3,
+  "nextStartRegionOffset" : 0,
   "totalRegions" : 8,
-  "lastRunAt" : "2026-03-17T10:50:28.491778",
-  "lastRegionName" : "서울강서_내발산동",
-  "reason" : "ABUSE_ABORTED",
-  "blockedRegionName" : "서울강서_내발산동"
+  "lastRunAt" : "2026-03-20T09:23:10.043264",
+  "lastRegionName" : "서울영등포_여의도동",
+  "reason" : "SUCCESS",
+  "blockedRegionName" : null
 }
