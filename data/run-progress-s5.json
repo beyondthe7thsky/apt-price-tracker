@@ -1,8 +1,8 @@
 {
-  "nextStartRegionOffset" : 5,
+  "nextStartRegionOffset" : 7,
   "totalRegions" : 8,
-  "lastRunAt" : "2026-03-17T10:52:25.977805",
-  "lastRegionName" : "서울구로_구로동",
+  "lastRunAt" : "2026-03-23T10:52:28.185309",
+  "lastRegionName" : "서울금천_독산동",
   "reason" : "ABUSE_ABORTED",
-  "blockedRegionName" : "서울구로_구로동"
+  "blockedRegionName" : "서울금천_독산동"
 }
