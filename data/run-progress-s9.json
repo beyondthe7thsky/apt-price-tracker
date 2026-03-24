@@ -1,8 +1,8 @@
 {
-  "nextStartRegionOffset" : 35,
+  "nextStartRegionOffset" : 0,
   "totalRegions" : 37,
-  "lastRunAt" : "2026-03-23T15:21:41.000276",
-  "lastRegionName" : "서울송파_오금동",
-  "reason" : "RUNNING",
+  "lastRunAt" : "2026-03-24T14:27:18.720617",
+  "lastRegionName" : "서울송파_마천동",
+  "reason" : "SUCCESS",
   "blockedRegionName" : null
 }
