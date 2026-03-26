@@ -1,8 +1,8 @@
 {
-  "nextStartRegionOffset" : 9,
+  "nextStartRegionOffset" : 0,
   "totalRegions" : 32,
-  "lastRunAt" : "2026-03-25T11:49:34.054650",
-  "lastRegionName" : "서울동대문_장안동",
-  "reason" : "ABUSE_ABORTED",
-  "blockedRegionName" : "서울동대문_장안동"
+  "lastRunAt" : "2026-03-26T14:17:34.821068",
+  "lastRegionName" : "서울은평_응암동",
+  "reason" : "SUCCESS",
+  "blockedRegionName" : null
 }
