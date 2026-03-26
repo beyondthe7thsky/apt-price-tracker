@@ -1,8 +1,8 @@
 {
-  "nextStartRegionOffset" : 2,
+  "nextStartRegionOffset" : 0,
   "totalRegions" : 44,
-  "lastRunAt" : "2026-03-25T12:18:06.656788",
-  "lastRegionName" : "성남수정_수진동",
-  "reason" : "ABUSE_ABORTED",
-  "blockedRegionName" : "성남수정_수진동"
+  "lastRunAt" : "2026-03-26T14:55:22.476286",
+  "lastRegionName" : "성남판교_하산운동",
+  "reason" : "SUCCESS",
+  "blockedRegionName" : null
 }
