@@ -1,8 +1,8 @@
 {
   "nextStartRegionOffset" : 0,
   "totalRegions" : 8,
-  "lastRunAt" : "2026-03-30T10:11:05.086081",
-  "lastRegionName" : "서울동작_흑석동",
-  "reason" : "ABUSE_ABORTED",
-  "blockedRegionName" : "서울동작_흑석동"
+  "lastRunAt" : "2026-04-21T09:58:41.178469",
+  "lastRegionName" : "서울금천_독산동",
+  "reason" : "SUCCESS",
+  "blockedRegionName" : null
 }
