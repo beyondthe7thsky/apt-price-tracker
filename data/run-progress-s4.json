@@ -1,8 +1,8 @@
 {
-  "nextStartRegionOffset" : 4,
+  "nextStartRegionOffset" : 0,
   "totalRegions" : 8,
-  "lastRunAt" : "2026-03-30T10:10:08.501140",
-  "lastRegionName" : "서울강서_화곡동",
-  "reason" : "ABUSE_ABORTED",
-  "blockedRegionName" : "서울강서_화곡동"
+  "lastRunAt" : "2026-04-21T09:15:37.886628",
+  "lastRegionName" : "서울영등포_여의도동",
+  "reason" : "SUCCESS",
+  "blockedRegionName" : null
 }
