@@ -295,6 +295,16 @@ class BotRunner(
 
         fun saveCheckpoint(listings: List<Listing>, regionName: String) {
             val filtered = listings.filter { it.pyeong in 20..39 }
+            if (filtered.isEmpty()) {
+                log.warn(
+                    "{} 수집 결과가 비어 있어 기존 데이터를 유지합니다. rawListings={}, targetPyeongListings={}",
+                    regionName,
+                    listings.size,
+                    filtered.size
+                )
+                return
+            }
+
             allNewListings.addAll(filtered)
             successfulRegions.add(regionName)
 
