@@ -554,66 +554,14 @@ class BotRunner(
         allNewListings: List<Listing>,
         successfulRegions: Set<String>,
         now: String,
-    ): MergeResult {
-        val newByArticleNo = allNewListings
-            .groupBy { it.articleNo }
-            .mapValues { (_, items) -> items.maxByOrNull { it.updatedAt } ?: items.first() }
-
-        val mergedByArticleNo = mutableMapOf<String, Listing>()
-        val notifyList = mutableListOf<Pair<Listing, String>>()
-        var offMarketCandidateChanged = 0
-        var offMarketChanged = 0
-        var relistedChanged = 0
-
-        // 기존 매물 처리: 이번 실행에 성공한 지역에서 미노출이면 거래종결 후보/추정으로 상태 전환
-        oldData.forEach { (articleNo, oldListing) ->
-            if (newByArticleNo.containsKey(articleNo)) return@forEach
-
-            if (oldListing.regionName !in successfulRegions) {
-                mergedByArticleNo[articleNo] = oldListing
-                return@forEach
-            }
-
-            val transitioned = transitionMissingListing(oldListing, now)
-            mergedByArticleNo[articleNo] = transitioned
-
-            if (transitioned.status != oldListing.status) {
-                when (transitioned.status) {
-                    MarketStatus.OFF_MARKET_CANDIDATE -> offMarketCandidateChanged += 1
-                    MarketStatus.OFF_MARKET -> offMarketChanged += 1
-                    else -> Unit
-                }
-            }
-        }
-
-        // 신규/재노출 매물 처리
-        newByArticleNo.forEach { (articleNo, freshListing) ->
-            val oldListing = oldData[articleNo]
-            val normalizedListing = mergeSeenListing(oldListing, freshListing, now)
-            mergedByArticleNo[articleNo] = normalizedListing
-
-            if (oldListing == null) {
-                notifyList.add(normalizedListing to "신규✨")
-            } else if (normalizedListing.status == MarketStatus.RELISTED) {
-                relistedChanged += 1
-                notifyList.add(normalizedListing to "다시 등록된 매물♻️")
-            } else if (freshListing.price < oldListing.price) {
-                notifyList.add(normalizedListing to "급매⬇️${oldListing.price - freshListing.price}만")
-            }
-        }
-
-        val mergedListings = mergedByArticleNo.values
-            .sortedWith(compareBy<Listing> { it.regionName }.thenBy { it.articleNo })
-
-        return MergeResult(
-            mergedListings = mergedListings,
-            notifyList = notifyList,
-            newVisibleCount = newByArticleNo.size,
-            offMarketCandidateChanged = offMarketCandidateChanged,
-            offMarketChanged = offMarketChanged,
-            relistedChanged = relistedChanged
+    ): MergeResult =
+        ListingStatusMerger.merge(
+            oldData = oldData,
+            allNewListings = allNewListings,
+            successfulRegions = successfulRegions,
+            now = now,
+            offMarketConfirmMissCount = offMarketConfirmMissCount
         )
-    }
 
     private fun normalizedDelayRange(minMs: Long, maxMs: Long, defaultMinMs: Long, defaultMaxMs: Long): Pair<Long, Long> {
         if (minMs <= 0L && maxMs <= 0L) {
@@ -635,75 +583,6 @@ class BotRunner(
         in 114..118 -> 8
         else -> 9
     }
-
-    private fun mergeSeenListing(old: Listing?, fresh: Listing, now: String): Listing {
-        if (old == null) {
-            return fresh.copy(
-                updatedAt = now,
-                firstSeenAt = now,
-                lastSeenAt = now,
-                status = MarketStatus.ACTIVE,
-                statusChangedAt = now,
-                offMarketAt = null,
-                missCount = 0
-            )
-        }
-
-        val nextStatus = if (old.status == MarketStatus.OFF_MARKET) {
-            MarketStatus.RELISTED
-        } else {
-            MarketStatus.ACTIVE
-        }
-        val statusChangedAt = if (nextStatus != old.status) now else old.statusChangedAt
-        val normalizedFirstSeenAt = old.firstSeenAt.ifBlank { old.updatedAt }
-        val normalizedBuildingName = fresh.buildingName.ifBlank { old.buildingName }
-        val normalizedFeatureDesc = fresh.featureDesc.ifBlank { old.featureDesc }
-        val normalizedTagList = fresh.tagList.ifEmpty { old.tagList }
-
-        return fresh.copy(
-            updatedAt = now,
-            firstSeenAt = normalizedFirstSeenAt,
-            lastSeenAt = now,
-            buildingName = normalizedBuildingName,
-            featureDesc = normalizedFeatureDesc,
-            tagList = normalizedTagList,
-            status = nextStatus,
-            statusChangedAt = statusChangedAt,
-            offMarketAt = null,
-            missCount = 0
-        )
-    }
-
-    private fun transitionMissingListing(old: Listing, now: String): Listing {
-        if (old.status == MarketStatus.OFF_MARKET) {
-            return old
-        }
-
-        val newMissCount = old.missCount + 1
-        val threshold = offMarketConfirmMissCount.coerceAtLeast(2)
-        val nextStatus = if (newMissCount >= threshold) {
-            MarketStatus.OFF_MARKET
-        } else {
-            MarketStatus.OFF_MARKET_CANDIDATE
-        }
-        val statusChangedAt = if (nextStatus != old.status) now else old.statusChangedAt
-
-        return old.copy(
-            status = nextStatus,
-            statusChangedAt = statusChangedAt,
-            offMarketAt = if (nextStatus == MarketStatus.OFF_MARKET) (old.offMarketAt ?: now) else old.offMarketAt,
-            missCount = newMissCount
-        )
-    }
-
-    private data class MergeResult(
-        val mergedListings: List<Listing>,
-        val notifyList: List<Pair<Listing, String>>,
-        val newVisibleCount: Int,
-        val offMarketCandidateChanged: Int,
-        val offMarketChanged: Int,
-        val relistedChanged: Int
-    )
 
     private sealed class RegionFetchOutcome {
         data class Success(val listings: List<Listing>) : RegionFetchOutcome()
