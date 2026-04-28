@@ -1,8 +1,8 @@
 {
   "nextStartRegionOffset" : 0,
   "totalRegions" : 7,
-  "lastRunAt" : "2026-04-21T08:05:53.121520",
+  "lastRunAt" : "2026-04-29T08:04:56.990627",
   "lastRegionName" : "수원_천천동",
-  "reason" : "SUCCESS",
+  "reason" : "NO_SUCCESS",
   "blockedRegionName" : null
 }
