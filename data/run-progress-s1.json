@@ -1,8 +1,8 @@
 {
   "nextStartRegionOffset" : 0,
   "totalRegions" : 7,
-  "lastRunAt" : "2026-04-29T08:04:56.990627",
-  "lastRegionName" : "수원_천천동",
-  "reason" : "NO_SUCCESS",
-  "blockedRegionName" : null
+  "lastRunAt" : "2026-04-29T09:57:47.089123",
+  "lastRegionName" : "수원_매탄동",
+  "reason" : "DATA_ISSUE_NO_SUCCESS",
+  "blockedRegionName" : "수원_매탄동"
 }
