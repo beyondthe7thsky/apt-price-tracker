@@ -35,6 +35,7 @@ class ListingStatusMergerTest {
 
         assertEquals(1, result.mergedListings.size)
         val merged = result.mergedListings.single()
+        assertEquals("old-1", merged.normalizedEntityId())
         assertEquals("new-1", merged.articleNo)
         assertEquals(MarketStatus.ACTIVE, merged.status)
         assertEquals("2026-04-01T09:00:00", merged.firstSeenAt)
@@ -67,6 +68,8 @@ class ListingStatusMergerTest {
         )
 
         val merged = result.mergedListings.single()
+        assertEquals("old-2", merged.normalizedEntityId())
+        assertEquals("new-2", merged.articleNo)
         assertEquals(MarketStatus.RELISTED, merged.status)
         assertEquals("2026-04-12T09:00:00", merged.statusChangedAt)
         assertNull(merged.offMarketAt)

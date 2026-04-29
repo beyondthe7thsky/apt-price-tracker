@@ -10,6 +10,7 @@ enum class MarketStatus {
 }
 
 data class Listing(
+    val entityId: String = "",
     val articleNo: String,
     val hscpNo: String = "",
     val sameAddrHash: String = "",
@@ -32,7 +33,9 @@ data class Listing(
     val statusChangedAt: String = updatedAt,
     val offMarketAt: String? = null,
     val missCount: Int = 0,
-)
+) {
+    fun normalizedEntityId(): String = entityId.ifBlank { articleNo }
+}
 
 data class TeamsMessage(
     val `@type`: String = "MessageCard",

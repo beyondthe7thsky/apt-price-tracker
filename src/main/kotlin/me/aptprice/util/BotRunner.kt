@@ -263,6 +263,7 @@ class BotRunner(
         var blockedByAbuse = false
         var abortedByAbuse = false
         var stoppedByTimeBudget = false
+        var stoppedByDataIssue = false
         var blockedRegionName: String? = null
         var nextStartOffset = effectiveOffset
         var lastRegionName = ""
@@ -293,16 +294,26 @@ class BotRunner(
             )
         }
 
-        fun saveCheckpoint(listings: List<Listing>, regionName: String) {
+        fun saveCheckpoint(listings: List<Listing>, regionName: String): CheckpointSaveResult {
             val filtered = listings.filter { it.pyeong in 20..39 }
             if (filtered.isEmpty()) {
+                val acceptEmptyResult = RegionResultGuard.shouldAccept(regionName, oldData, listings)
+                if (!acceptEmptyResult) {
+                    log.error(
+                        "{} 수집 결과가 비정상적으로 비어 있어 성공 처리하지 않습니다. rawListings={}, targetPyeongListings={}, 기존추적매물존재=true",
+                        regionName,
+                        listings.size,
+                        filtered.size
+                    )
+                    return CheckpointSaveResult.SUSPICIOUS_EMPTY
+                }
                 log.warn(
                     "{} 수집 결과가 비어 있어 기존 데이터를 유지합니다. rawListings={}, targetPyeongListings={}",
                     regionName,
                     listings.size,
                     filtered.size
                 )
-                return
+                return CheckpointSaveResult.EMPTY_ACCEPTED
             }
 
             allNewListings.addAll(filtered)
@@ -318,6 +329,7 @@ class BotRunner(
                 checkpoint.newVisibleCount,
                 checkpoint.mergedListings.size
             )
+            return CheckpointSaveResult.SAVED
         }
 
         fun waitBeforeNextRegion(shouldWait: Boolean): Boolean {
@@ -351,9 +363,21 @@ class BotRunner(
             lastRegionName = regionName
             when (val outcome = fetchRegionWithCooldownRetry(regionName, regionCode)) {
                 is RegionFetchOutcome.Success -> {
-                    saveCheckpoint(outcome.listings, regionName)
-                    nextStartOffset = (regionAbsoluteIndex + 1) % totalRegions
-                    persistRunProgress("RUNNING")
+                    when (saveCheckpoint(outcome.listings, regionName)) {
+                        CheckpointSaveResult.SAVED,
+                        CheckpointSaveResult.EMPTY_ACCEPTED -> {
+                            nextStartOffset = (regionAbsoluteIndex + 1) % totalRegions
+                            persistRunProgress("RUNNING")
+                        }
+                        CheckpointSaveResult.SUSPICIOUS_EMPTY -> {
+                            stoppedByDataIssue = true
+                            blockedRegionName = regionName
+                            nextStartOffset = regionAbsoluteIndex
+                            persistRunProgress("SUSPICIOUS_EMPTY", regionName)
+                            log.error("{} 수집 결과가 의심스러워 동일 지역부터 재시도하도록 오프셋을 유지합니다.", regionName)
+                            break@mainLoop
+                        }
+                    }
                 }
                 is RegionFetchOutcome.AbuseSkipped -> {
                     blockedByAbuse = true
@@ -373,8 +397,12 @@ class BotRunner(
                 }
                 is RegionFetchOutcome.Failed -> {
                     log.warn("{} 수집 실패(기존 데이터 유지): {}", regionName, outcome.reason)
-                    nextStartOffset = (regionAbsoluteIndex + 1) % totalRegions
-                    persistRunProgress("RUNNING")
+                    stoppedByDataIssue = true
+                    blockedRegionName = regionName
+                    nextStartOffset = regionAbsoluteIndex
+                    persistRunProgress("FETCH_FAILED", regionName)
+                    log.error("{} 수집 실패로 동일 지역부터 재시도하도록 오프셋을 유지합니다.", regionName)
+                    break@mainLoop
                 }
             }
             if (!waitBeforeNextRegion(index < runRegions.lastIndex)) {
@@ -420,8 +448,18 @@ class BotRunner(
                     val regionCode = region["code"]!!
                     when (val outcome = fetchRegionWithCooldownRetry(regionName, regionCode)) {
                         is RegionFetchOutcome.Success -> {
-                            saveCheckpoint(outcome.listings, regionName)
-                            log.info("{} 재수집 성공({}/{})", regionName, round, replayRounds)
+                            when (saveCheckpoint(outcome.listings, regionName)) {
+                                CheckpointSaveResult.SAVED,
+                                CheckpointSaveResult.EMPTY_ACCEPTED -> {
+                                    log.info("{} 재수집 성공({}/{})", regionName, round, replayRounds)
+                                }
+                                CheckpointSaveResult.SUSPICIOUS_EMPTY -> {
+                                    log.error("{} 재수집도 비정상 빈 결과라 재수집 큐에 다시 넣습니다.", regionName)
+                                    abuseSkippedRegionQueue[regionName] = region
+                                    stoppedByDataIssue = true
+                                    blockedRegionName = regionName
+                                }
+                            }
                         }
                         is RegionFetchOutcome.AbuseSkipped -> {
                             blockedByAbuse = true
@@ -430,6 +468,9 @@ class BotRunner(
                         }
                         is RegionFetchOutcome.Failed -> {
                             log.warn("{} 재수집 실패(기존 데이터 유지): {}", regionName, outcome.reason)
+                            abuseSkippedRegionQueue[regionName] = region
+                            stoppedByDataIssue = true
+                            blockedRegionName = regionName
                         }
                     }
                     if (!waitBeforeNextRegion(index < replayTargets.lastIndex)) {
@@ -454,6 +495,9 @@ class BotRunner(
                 } else {
                     persistRunProgress("ABUSE_NO_SUCCESS", blockedRegionName)
                 }
+            } else if (stoppedByDataIssue) {
+                log.warn("데이터 이상/수집 실패로 성공한 지역 없이 종료합니다. 다음 시작 오프셋: {}", nextStartOffset)
+                persistRunProgress("DATA_ISSUE_NO_SUCCESS", blockedRegionName)
             } else if (stoppedByTimeBudget) {
                 log.warn("실행 시간 예산 도달로 성공 지역 없이 종료합니다. 다음 시작 오프셋: {}", nextStartOffset)
                 persistRunProgress("TIME_BUDGET_NO_SUCCESS")
@@ -500,6 +544,9 @@ class BotRunner(
         if (abortedByAbuse) {
             log.warn("abuse 감지로 실행을 조기 종료했습니다. 다음 시작 오프셋: {}", nextStartOffset)
             persistRunProgress("ABUSE_ABORTED", blockedRegionName)
+        } else if (stoppedByDataIssue) {
+            log.warn("데이터 이상/수집 실패로 조기 종료했습니다. 다음 시작 오프셋: {}", nextStartOffset)
+            persistRunProgress("DATA_ISSUE", blockedRegionName)
         } else if (stoppedByTimeBudget) {
             log.warn("실행 시간 예산 도달로 조기 종료했습니다. 다음 시작 오프셋: {}", nextStartOffset)
             persistRunProgress("TIME_BUDGET")
@@ -588,5 +635,11 @@ class BotRunner(
         data class Success(val listings: List<Listing>) : RegionFetchOutcome()
         data class AbuseSkipped(val reason: String) : RegionFetchOutcome()
         data class Failed(val reason: String) : RegionFetchOutcome()
+    }
+
+    private enum class CheckpointSaveResult {
+        SAVED,
+        EMPTY_ACCEPTED,
+        SUSPICIOUS_EMPTY
     }
 }

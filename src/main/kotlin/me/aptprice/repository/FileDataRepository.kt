@@ -24,7 +24,7 @@ class FileDataRepository(
         val filePath = listingPath()
         if (!Files.exists(filePath)) return emptyMap()
         val list: List<Listing> = objectMapper.readValue(filePath.toFile())
-        return list.associateBy { it.articleNo }
+        return list.associateBy { it.normalizedEntityId() }
     }
 
     fun saveAll(listings: List<Listing>) {

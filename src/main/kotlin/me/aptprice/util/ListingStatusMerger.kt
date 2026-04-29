@@ -16,21 +16,23 @@ internal object ListingStatusMerger {
             .groupBy { it.articleNo }
             .mapValues { (_, items) -> items.maxByOrNull { it.updatedAt } ?: items.first() }
 
-        val mergedByArticleNo = mutableMapOf<String, Listing>()
+        val oldByEntityId = oldData.mapKeys { it.key.ifBlank { it.value.normalizedEntityId() } }
+        val oldByArticleNo = oldByEntityId.values.associateBy { it.articleNo }
+        val mergedByEntityId = mutableMapOf<String, Listing>()
         val notifyList = mutableListOf<Pair<Listing, String>>()
-        val matchedOldArticleNos = mutableSetOf<String>()
-        val oldByIdentityKey = buildOldByIdentityKey(oldData.values)
+        val matchedOldEntityIds = mutableSetOf<String>()
+        val oldByIdentityKey = buildOldByIdentityKey(oldByEntityId.values)
         var offMarketCandidateChanged = 0
         var offMarketChanged = 0
         var relistedChanged = 0
 
         newByArticleNo.forEach { (articleNo, freshListing) ->
-            val oldListing = oldData[articleNo] ?: matchOldListingByIdentity(freshListing, oldByIdentityKey)
+            val oldListing = oldByArticleNo[articleNo] ?: matchOldListingByIdentity(freshListing, oldByIdentityKey)
             if (oldListing != null) {
-                matchedOldArticleNos += oldListing.articleNo
+                matchedOldEntityIds += oldListing.normalizedEntityId()
             }
             val normalizedListing = mergeSeenListing(oldListing, freshListing, now)
-            mergedByArticleNo[articleNo] = normalizedListing
+            mergedByEntityId[normalizedListing.normalizedEntityId()] = normalizedListing
 
             if (oldListing == null) {
                 notifyList.add(normalizedListing to "신규✨")
@@ -42,17 +44,17 @@ internal object ListingStatusMerger {
             }
         }
 
-        oldData.forEach { (articleNo, oldListing) ->
-            if (articleNo in matchedOldArticleNos) return@forEach
-            if (newByArticleNo.containsKey(articleNo)) return@forEach
+        oldByEntityId.forEach { (entityId, oldListing) ->
+            if (entityId in matchedOldEntityIds) return@forEach
+            if (newByArticleNo.containsKey(oldListing.articleNo)) return@forEach
 
             if (oldListing.regionName !in successfulRegions) {
-                mergedByArticleNo[articleNo] = oldListing
+                mergedByEntityId[entityId] = oldListing
                 return@forEach
             }
 
             val transitioned = transitionMissingListing(oldListing, now, offMarketConfirmMissCount)
-            mergedByArticleNo[articleNo] = transitioned
+            mergedByEntityId[entityId] = transitioned
 
             if (transitioned.status != oldListing.status) {
                 when (transitioned.status) {
@@ -63,8 +65,8 @@ internal object ListingStatusMerger {
             }
         }
 
-        val mergedListings = mergedByArticleNo.values
-            .sortedWith(compareBy<Listing> { it.regionName }.thenBy { it.articleNo })
+        val mergedListings = mergedByEntityId.values
+            .sortedWith(compareBy<Listing> { it.regionName }.thenBy { it.normalizedEntityId() })
 
         return MergeResult(
             mergedListings = mergedListings,
@@ -101,6 +103,7 @@ internal object ListingStatusMerger {
     private fun mergeSeenListing(old: Listing?, fresh: Listing, now: String): Listing {
         if (old == null) {
             return fresh.copy(
+                entityId = fresh.normalizedEntityId(),
                 updatedAt = now,
                 firstSeenAt = now,
                 lastSeenAt = now,
@@ -123,6 +126,7 @@ internal object ListingStatusMerger {
         val normalizedTagList = fresh.tagList.ifEmpty { old.tagList }
 
         return fresh.copy(
+            entityId = old.normalizedEntityId(),
             updatedAt = now,
             firstSeenAt = normalizedFirstSeenAt,
             lastSeenAt = now,
