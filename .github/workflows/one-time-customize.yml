@@ -21,57 +21,72 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           report = Path('.github/workflows/send-teams-from-json.yml')
           page = Path('pages/index.html')
           bot = Path('.github/workflows/apt-price-bot.yml')
 
-          def replace_required(text, old, new, label, min_count=1):
-              count = text.count(old)
-              if count < min_count:
-                  raise SystemExit(f'Patch target not found: {label} (found {count})')
-              return text.replace(old, new)
-
           rt = report.read_text(encoding='utf-8')
           pt = page.read_text(encoding='utf-8')
+          bt = bot.read_text(encoding='utf-8')
 
+          # Fork page URLs
           rt = rt.replace('https://saechimdaeki.github.io/apt-price-tracker/', 'https://beyondthe7thsky.github.io/apt-price-tracker/')
           pt = pt.replace('https://saechimdaeki.github.io/apt-price-tracker/', 'https://beyondthe7thsky.github.io/apt-price-tracker/')
 
-          old_option = '<option>12억 이상</option>'
-          new_options = '<option>12~15억</option><option>15~20억</option><option>20~30억</option><option>30억 이상</option>'
-          rt = replace_required(rt, old_option, new_options, 'report price options')
-          pt = replace_required(pt, old_option, new_options, 'page price options')
+          # Price band calculation in report generator
+          rt, n = re.subn(
+              r'''          def price_band_label\(price\):\n(?:              .*\n)+?              return "12억 이상"''',
+              '''          def price_band_label(price):\n              if price < 80_000:\n                  return "8억 미만"\n              if price < 90_000:\n                  return "8~9억대"\n              if price < 100_000:\n                  return "9~10억대"\n              if price < 120_000:\n                  return "10~12억대"\n              if price < 150_000:\n                  return "12~15억"\n              if price < 200_000:\n                  return "15~20억"\n              if price < 300_000:\n                  return "20~30억"\n              return "30억 이상"''',
+              rt,
+              count=1,
+          )
+          print('price_band_label replacements:', n)
 
-          old_full = "const fullUrl=(u)=>{const t=String(u??'').trim(); if(!t) return '#'; return t.startsWith('/') ? `https://m.land.naver.com${t}` : t;};"
-          new_full = "const fullUrl=(row)=>{const t=String(row?.url??'').trim(); const m=t.match(/(?:articles\\/|article\\/info\\/)(\\d+)/); if(m) return `https://m.land.naver.com/article/info/${m[1]}`; if(t.startsWith('/')) return `https://m.land.naver.com${t}`; if(t.includes('fin.land.naver.com/map')) return mapUrl(row); return t || mapUrl(row);};\n              const priceBandFor=(price)=>{const p=Number(price||0); if(p<80000)return '8억 미만'; if(p<90000)return '8~9억대'; if(p<100000)return '9~10억대'; if(p<120000)return '10~12억대'; if(p<150000)return '12~15억'; if(p<200000)return '15~20억'; if(p<300000)return '20~30억'; return '30억 이상';};"
-          rt = replace_required(rt, old_full, new_full, 'report fullUrl')
+          options_old = '<option>12억 이상</option>'
+          options_new = '<option>12~15억</option><option>15~20억</option><option>20~30억</option><option>30억 이상</option>'
+          rt = rt.replace(options_old, options_new)
+          pt = pt.replace(options_old, options_new)
 
-          old_full_page = "const fullUrl=(u)=>{const t=String(u??'').trim(); if(!t) return '#'; return t.startsWith('/') ? `https://m.land.naver.com${t}` : t;};"
-          new_full_page = "const fullUrl=(row)=>{const t=String(row?.url??'').trim(); const m=t.match(/(?:articles\\/|article\\/info\\/)(\\d+)/); if(m) return `https://m.land.naver.com/article/info/${m[1]}`; if(t.startsWith('/')) return `https://m.land.naver.com${t}`; if(t.includes('fin.land.naver.com/map')) return mapUrl(row); return t || mapUrl(row);};\n    const priceBandFor=(price)=>{const p=Number(price||0); if(p<80000)return '8억 미만'; if(p<90000)return '8~9억대'; if(p<100000)return '9~10억대'; if(p<120000)return '10~12억대'; if(p<150000)return '12~15억'; if(p<200000)return '15~20억'; if(p<300000)return '20~30억'; return '30억 이상';};"
-          pt = replace_required(pt, old_full_page, new_full_page, 'page fullUrl')
+          # Current pages/index.html may use multi-line option markup
+          if '12억 이상' in pt and '30억 이상' not in pt:
+              pt = pt.replace('            <option>12억 이상</option>', '            <option>12~15억</option>\n            <option>15~20억</option>\n            <option>20~30억</option>\n            <option>30억 이상</option>')
 
-          rt = replace_required(rt, 'fullUrl(it.url)', 'fullUrl(it)', 'report detail link call')
-          pt = replace_required(pt, 'fullUrl(it.url)', 'fullUrl(it)', 'page detail link call')
+          # Add priceBandFor helper and normalize legacy/detail URLs.
+          def patch_js(text):
+              if 'const priceBandFor=' not in text:
+                  text = re.sub(
+                      r'''(\s*const fullUrl=\(u\)=>\{[^\n]+\};)''',
+                      '''\n              const fullUrl=(row)=>{const t=String(row?.url??'').trim(); const m=t.match(/(?:articles\\/|article\\/info\\/)(\\d+)/); if(m) return `https://m.land.naver.com/article/info/${m[1]}`; if(t.startsWith('/')) return `https://m.land.naver.com${t}`; if(t.includes('fin.land.naver.com/map')) return mapUrl(row); return t || mapUrl(row);};\n              const priceBandFor=(price)=>{const p=Number(price||0); if(p<80000)return '8억 미만'; if(p<90000)return '8~9억대'; if(p<100000)return '9~10억대'; if(p<120000)return '10~12억대'; if(p<150000)return '12~15억'; if(p<200000)return '15~20억'; if(p<300000)return '20~30억'; return '30억 이상';};''',
+                      text,
+                      count=1,
+                  )
+              text = text.replace('fullUrl(it.url)', 'fullUrl(it)')
+              text = text.replace('if (priceBand && x.priceBand !== priceBand) return false;', 'if (priceBand && priceBandFor(x.price) !== priceBand) return false;')
+              return text
 
-          old_filter = 'if (priceBand && x.priceBand !== priceBand) return false;'
-          new_filter = 'if (priceBand && priceBandFor(x.price) !== priceBand) return false;'
-          rt = replace_required(rt, old_filter, new_filter, 'report price filter')
-          pt = replace_required(pt, old_filter, new_filter, 'page price filter')
+          rt = patch_js(rt)
+          pt = patch_js(pt)
 
-          trigger_anchor = 'on:\n  # schedule:\n  #   # KST 13:00 (평일) = UTC 04:00 (월~금)\n  #   - cron: "0 4 * * 1-5"\n  workflow_dispatch:'
-          trigger_new = 'on:\n  workflow_run:\n    workflows: ["run"]\n    types: [completed]\n  workflow_dispatch:'
-          rt = replace_required(rt, trigger_anchor, trigger_new, 'report workflow trigger')
-          rt = replace_required(rt, 'jobs:\n  build-report:\n    runs-on: ubuntu-latest', "jobs:\n  build-report:\n    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}\n    runs-on: ubuntu-latest", 'report success condition')
+          # Auto rebuild/deploy after successful collection run.
+          if 'workflow_run:' not in rt:
+              rt = rt.replace('on:\n', 'on:\n  workflow_run:\n    workflows: ["run"]\n    types: [completed]\n', 1)
+          if "github.event.workflow_run.conclusion" not in rt:
+              rt = rt.replace('jobs:\n  build-report:\n', "jobs:\n  build-report:\n    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}\n", 1)
+
+          # Daily 08:30 KST schedule for collector.
+          if 'cron: "30 23 * * *"' not in bt:
+              bt = re.sub(
+                  r'''on:\n(?:  # schedule:.*\n(?:  #.*\n)*)?  workflow_dispatch:''',
+                  'on:\n  schedule:\n    # 매일 KST 08:30 = UTC 전날 23:30\n    - cron: "30 23 * * *"\n  workflow_dispatch:',
+                  bt,
+                  count=1,
+              )
+          bt = bt.replace('git rebase "origin/${BRANCH}"', 'git rebase -X theirs "origin/${BRANCH}"')
 
           report.write_text(rt, encoding='utf-8')
           page.write_text(pt, encoding='utf-8')
-
-          bt = bot.read_text(encoding='utf-8')
-          old_schedule = 'on:\n  # schedule:\n  #   # KST 08:30 (평일) = UTC 23:30 (일~목)\n  #   - cron: "30 23 * * 0-4"\n  #   # KST 13:30 (평일) = UTC 04:30 (월~금)\n  #   - cron: "30 4 * * 1-5"\n  workflow_dispatch:'
-          new_schedule = 'on:\n  schedule:\n    # 매일 KST 08:30 = UTC 전날 23:30\n    - cron: "30 23 * * *"\n  workflow_dispatch:'
-          bt = replace_required(bt, old_schedule, new_schedule, 'collector daily schedule')
-          bt = replace_required(bt, 'git rebase "origin/${BRANCH}"', 'git rebase -X theirs "origin/${BRANCH}"', 'collector conflict handling')
           bot.write_text(bt, encoding='utf-8')
           PY
 
@@ -83,11 +98,14 @@ jobs:
           grep -q 'cron: "30 23 \* \* \*"' .github/workflows/apt-price-bot.yml
           grep -q 'git rebase -X theirs' .github/workflows/apt-price-bot.yml
 
-      - name: Commit patch and remove one-time workflow
+      - name: Commit patched files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .github/workflows/one-time-customize.yml
           git add .github/workflows/send-teams-from-json.yml .github/workflows/apt-price-bot.yml pages/index.html
-          git commit -m "feat: customize price bands links and automation"
-          git push origin HEAD:main
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "feat: customize price bands links and automation"
+            git push origin HEAD:main
+          fi
