@@ -1,0 +1,96 @@
+name: one-time-customize
+
+on:
+  push:
+    paths:
+      - ".github/workflows/one-time-customize.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply customizations
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          report = Path('.github/workflows/send-teams-from-json.yml')
+          page = Path('pages/index.html')
+          bot = Path('.github/workflows/apt-price-bot.yml')
+
+          def replace_required(text, old, new, label, min_count=1):
+              count = text.count(old)
+              if count < min_count:
+                  raise SystemExit(f'Patch target not found: {label} (found {count})')
+              return text.replace(old, new)
+
+          # 1) Report generator + current page: fork URLs, extended price bands, robust Naver links.
+          rt = report.read_text(encoding='utf-8')
+          pt = page.read_text(encoding='utf-8')
+
+          rt = rt.replace('https://saechimdaeki.github.io/apt-price-tracker/', 'https://beyondthe7thsky.github.io/apt-price-tracker/')
+          pt = pt.replace('https://saechimdaeki.github.io/apt-price-tracker/', 'https://beyondthe7thsky.github.io/apt-price-tracker/')
+
+          old_option = '<option>12억 이상</option>'
+          new_options = '<option>12~15억</option><option>15~20억</option><option>20~30억</option><option>30억 이상</option>'
+          rt = replace_required(rt, old_option, new_options, 'report price options')
+          pt = replace_required(pt, old_option, new_options, 'page price options')
+
+          old_full = "const fullUrl=(u)=>{const t=String(u??'').trim(); if(!t) return '#'; return t.startsWith('/') ? `https://m.land.naver.com${t}` : t;};"
+          new_full = "const fullUrl=(row)=>{const t=String(row?.url??'').trim(); const m=t.match(/(?:articles\\/|article\\/info\\/)(\\d+)/); if(m) return `https://m.land.naver.com/article/info/${m[1]}`; if(t.startsWith('/')) return `https://m.land.naver.com${t}`; if(t.includes('fin.land.naver.com/map')) return mapUrl(row); return t || mapUrl(row);};\n              const priceBandFor=(price)=>{const p=Number(price||0); if(p<80000)return '8억 미만'; if(p<90000)return '8~9억대'; if(p<100000)return '9~10억대'; if(p<120000)return '10~12억대'; if(p<150000)return '12~15억'; if(p<200000)return '15~20억'; if(p<300000)return '20~30억'; return '30억 이상';};"
+          rt = replace_required(rt, old_full, new_full, 'report fullUrl')
+
+          old_full_page = "const fullUrl=(u)=>{const t=String(u??'').trim(); if(!t) return '#'; return t.startsWith('/') ? `https://m.land.naver.com${t}` : t;};"
+          new_full_page = "const fullUrl=(row)=>{const t=String(row?.url??'').trim(); const m=t.match(/(?:articles\\/|article\\/info\\/)(\\d+)/); if(m) return `https://m.land.naver.com/article/info/${m[1]}`; if(t.startsWith('/')) return `https://m.land.naver.com${t}`; if(t.includes('fin.land.naver.com/map')) return mapUrl(row); return t || mapUrl(row);};\n    const priceBandFor=(price)=>{const p=Number(price||0); if(p<80000)return '8억 미만'; if(p<90000)return '8~9억대'; if(p<100000)return '9~10억대'; if(p<120000)return '10~12억대'; if(p<150000)return '12~15억'; if(p<200000)return '15~20억'; if(p<300000)return '20~30억'; return '30억 이상';};"
+          pt = replace_required(pt, old_full_page, new_full_page, 'page fullUrl')
+
+          rt = replace_required(rt, 'fullUrl(it.url)', 'fullUrl(it)', 'report detail link call')
+          pt = replace_required(pt, 'fullUrl(it.url)', 'fullUrl(it)', 'page detail link call')
+
+          old_filter = 'if (priceBand && x.priceBand !== priceBand) return false;'
+          new_filter = 'if (priceBand && priceBandFor(x.price) !== priceBand) return false;'
+          rt = replace_required(rt, old_filter, new_filter, 'report price filter')
+          pt = replace_required(pt, old_filter, new_filter, 'page price filter')
+
+          # Automatically rebuild/deploy the page after a successful collection run.
+          trigger_anchor = 'on:\n  # schedule:\n  #   # KST 13:00 (평일) = UTC 04:00 (월~금)\n  #   - cron: "0 4 * * 1-5"\n  workflow_dispatch:'
+          trigger_new = 'on:\n  workflow_run:\n    workflows: ["run"]\n    types: [completed]\n  workflow_dispatch:'
+          rt = replace_required(rt, trigger_anchor, trigger_new, 'report workflow trigger')
+          rt = replace_required(rt, 'jobs:\n  build-report:\n    runs-on: ubuntu-latest', "jobs:\n  build-report:\n    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}\n    runs-on: ubuntu-latest", 'report success condition')
+
+          report.write_text(rt, encoding='utf-8')
+          page.write_text(pt, encoding='utf-8')
+
+          # 2) Collector: every day 08:30 KST and auto-resolve data-file rebase conflicts in favor of this run.
+          bt = bot.read_text(encoding='utf-8')
+          old_schedule = 'on:\n  # schedule:\n  #   # KST 08:30 (평일) = UTC 23:30 (일~목)\n  #   - cron: "30 23 * * 0-4"\n  #   # KST 13:30 (평일) = UTC 04:30 (월~금)\n  #   - cron: "30 4 * * 1-5"\n  workflow_dispatch:'
+          new_schedule = 'on:\n  schedule:\n    # 매일 KST 08:30 = UTC 전날 23:30\n    - cron: "30 23 * * *"\n  workflow_dispatch:'
+          bt = replace_required(bt, old_schedule, new_schedule, 'collector daily schedule')
+          bt = replace_required(bt, 'git rebase "origin/${BRANCH}"', 'git rebase -X theirs "origin/${BRANCH}"', 'collector conflict handling')
+          bot.write_text(bt, encoding='utf-8')
+          PY
+
+      - name: Validate patched files
+        run: |
+          grep -q '30억 이상' .github/workflows/send-teams-from-json.yml
+          grep -q '30억 이상' pages/index.html
+          grep -q 'workflow_run:' .github/workflows/send-teams-from-json.yml
+          grep -q 'cron: "30 23 \* \* \*"' .github/workflows/apt-price-bot.yml
+          grep -q 'git rebase -X theirs' .github/workflows/apt-price-bot.yml
+
+      - name: Commit patch and remove one-time workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/one-time-customize.yml
+          git add .github/workflows/send-teams-from-json.yml .github/workflows/apt-price-bot.yml pages/index.html
+          git commit -m "feat: customize price bands links and automation"
+          git push origin HEAD:main
