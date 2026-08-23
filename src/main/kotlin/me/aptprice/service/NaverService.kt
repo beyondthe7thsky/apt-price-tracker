@@ -429,7 +429,7 @@ class NaverService(private val objectMapper: ObjectMapper) {
             areaSupplySqm = areaSupplySqm,
             areaExclusiveSqm = areaExclusiveSqm,
             pyeong = if (pyeongBaseSqm > 0.0) (pyeongBaseSqm / 3.3058).roundToInt() else 0,
-            url = "https://fin.land.naver.com/articles/$articleNo"
+            url = "https://m.land.naver.com/article/info/$articleNo"
         )
     }
 
