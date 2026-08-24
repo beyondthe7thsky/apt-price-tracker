@@ -1,0 +1,47 @@
+name: daily-apt-update
+
+on:
+  schedule:
+    # 매일 KST 08:30 = UTC 전날 23:30
+    - cron: "30 23 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch-regions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Queue all region groups
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -e
+          scopes=(
+            "1) 수원시 (영통구, 광교, 화서)"
+            "2) 용인시 수지구"
+            "3) 서울 마용성"
+            "4) 서울 서남권"
+            "5) 서울 남부"
+            "6) 서울 동부/서북권"
+            "7) 성남 전역"
+            "8) 안양권"
+            "9) 서울 강남3구"
+          )
+          for scope in "${scopes[@]}"; do
+            echo "Queue: $scope"
+            gh workflow run apt-price-bot.yml \
+              --repo "$GITHUB_REPOSITORY" \
+              -f region_scope="$scope" \
+              -f max_regions_per_run="0" \
+              -f start_region_offset="0" \
+              -f max_complex_pages_on_overflow="3" \
+              -f max_complexes_per_region="0" \
+              -f max_overflow_complexes_per_region="4" \
+              -f article_order="prc" \
+              -f max_run_minutes="165" \
+              -f commit_data="true"
+          done
