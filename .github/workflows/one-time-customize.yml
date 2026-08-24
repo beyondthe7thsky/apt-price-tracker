@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  actions: write
 
 jobs:
   patch:
@@ -17,23 +16,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply direct modifications
+      - name: Apply modifications
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import re
 
           report = Path('.github/workflows/send-teams-from-json.yml')
           page = Path('pages/index.html')
           bot = Path('.github/workflows/apt-price-bot.yml')
-
           rt = report.read_text(encoding='utf-8')
           pt = page.read_text(encoding='utf-8')
           bt = bot.read_text(encoding='utf-8')
-
-          rt = rt.replace('https://saechimdaeki.github.io/apt-price-tracker/', 'https://beyondthe7thsky.github.io/apt-price-tracker/')
-          pt = pt.replace('https://saechimdaeki.github.io/apt-price-tracker/', 'https://beyondthe7thsky.github.io/apt-price-tracker/')
 
           old_func = '''          def price_band_label(price):
               if price < 80_000:
@@ -63,15 +57,13 @@ jobs:
                   return "20~30억"
               return "30억 이상"
 '''
-          if old_func not in rt:
-              raise SystemExit('price function target not found')
+          assert old_func in rt, 'price function target missing'
           rt = rt.replace(old_func, new_func, 1)
 
-          options_new = '<option>12~15억</option><option>15~20억</option><option>20~30억</option><option>30억 이상</option>'
-          if '<option>12억 이상</option>' not in rt:
-              raise SystemExit('report price option target not found')
-          rt = rt.replace('<option>12억 이상</option>', options_new)
-
+          rt = rt.replace(
+              '<option>12억 이상</option>',
+              '<option>12~15억</option><option>15~20억</option><option>20~30억</option><option>30억 이상</option>'
+          )
           pt = pt.replace(
               '            <option>12억 이상</option>',
               '            <option>12~15억</option>\n            <option>15~20억</option>\n            <option>20~30억</option>\n            <option>30억 이상</option>'
@@ -79,18 +71,14 @@ jobs:
 
           old_url = '                      "url": compact_url(it.get("url", "")),'
           new_url = '                      "url": (f"/article/info/{str(it.get(\'articleNo\', \'\')).strip()}" if str(it.get("articleNo", "")).strip() else compact_url(it.get("url", ""))),'
-          if old_url not in rt:
-              raise SystemExit('detail url target not found')
+          assert old_url in rt, 'detail url target missing'
           rt = rt.replace(old_url, new_url, 1)
+
+          rt = rt.replace('https://saechimdaeki.github.io/apt-price-tracker/', 'https://beyondthe7thsky.github.io/apt-price-tracker/')
+          pt = pt.replace('https://saechimdaeki.github.io/apt-price-tracker/', 'https://beyondthe7thsky.github.io/apt-price-tracker/')
 
           if 'workflow_run:' not in rt:
               rt = rt.replace('on:\n', 'on:\n  workflow_run:\n    workflows: ["run"]\n    types: [completed]\n', 1)
-          if "github.event.workflow_run.conclusion" not in rt:
-              rt = rt.replace(
-                  'jobs:\n  build-report:\n',
-                  "jobs:\n  build-report:\n    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}\n",
-                  1,
-              )
 
           old_schedule = '''on:
   # schedule:
@@ -106,42 +94,32 @@ jobs:
     - cron: "30 23 * * *"
   workflow_dispatch:
 '''
-          if old_schedule not in bt:
-              raise SystemExit('schedule target not found')
+          assert old_schedule in bt, 'schedule target missing'
           bt = bt.replace(old_schedule, new_schedule, 1)
 
-          if 'git rebase "origin/${BRANCH}"' not in bt:
-              raise SystemExit('rebase target not found')
-          bt = bt.replace('git rebase "origin/${BRANCH}"', 'git rebase -X theirs "origin/${BRANCH}"', 1)
+          old_rebase = 'git rebase "origin/${BRANCH}"'
+          assert old_rebase in bt, 'rebase target missing'
+          bt = bt.replace(old_rebase, 'git rebase -X theirs "origin/${BRANCH}"', 1)
 
           report.write_text(rt, encoding='utf-8')
           page.write_text(pt, encoding='utf-8')
           bot.write_text(bt, encoding='utf-8')
           PY
 
-      - name: Validate values
-        shell: bash
+      - name: Validate
         run: |
           grep -Fq 'return "12~15억"' .github/workflows/send-teams-from-json.yml
-          grep -Fq 'return "15~20억"' .github/workflows/send-teams-from-json.yml
-          grep -Fq 'return "20~30억"' .github/workflows/send-teams-from-json.yml
           grep -Fq 'return "30억 이상"' .github/workflows/send-teams-from-json.yml
           grep -Fq '<option>30억 이상</option>' pages/index.html
+          grep -Fq '/article/info/' .github/workflows/send-teams-from-json.yml
           grep -Fq 'workflow_run:' .github/workflows/send-teams-from-json.yml
           grep -Fq 'cron: "30 23 * * *"' .github/workflows/apt-price-bot.yml
           grep -Fq 'git rebase -X theirs "origin/${BRANCH}"' .github/workflows/apt-price-bot.yml
-          grep -Fq '/article/info/' .github/workflows/send-teams-from-json.yml
 
-      - name: Commit target changes
-        shell: bash
+      - name: Commit target files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .github/workflows/send-teams-from-json.yml .github/workflows/apt-price-bot.yml pages/index.html
-          git commit -m "feat: update price bands links and automation"
+          git commit -m "feat: update price filters links and schedule"
           git push origin HEAD:main
-
-      - name: Rebuild GitHub Pages report
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run send-teams-from-json.yml --repo "$GITHUB_REPOSITORY"
