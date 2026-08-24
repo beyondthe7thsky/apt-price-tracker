@@ -7,6 +7,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 PAGES = ROOT / "pages"
 PAGES.mkdir(parents=True, exist_ok=True)
+KST = datetime.timezone(datetime.timedelta(hours=9))
+FRESH_DAYS = 14
 
 
 def as_int(v, default=0):
@@ -21,6 +23,23 @@ def as_float(v, default=0.0):
         return float(v)
     except Exception:
         return default
+
+
+def parse_dt(v):
+    s = str(v or "").strip()
+    if not s:
+        return None
+    try:
+        dt = datetime.datetime.fromisoformat(s.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=KST)
+        return dt.astimezone(KST)
+    except Exception:
+        return None
+
+
+def seen_at(item):
+    return parse_dt(item.get("lastSeenAt")) or parse_dt(item.get("updatedAt"))
 
 
 def format_price(price_man):
@@ -136,8 +155,21 @@ for item in raw:
 
 items = list(merged.values()) + no_key
 items = [x for x in items if 20.0 <= derive_pyeong(x) <= 39.999]
-live = [x for x in items if normalize_status(x.get("status")) in {"ACTIVE", "RELISTED"}]
-live.sort(key=lambda x: str(x.get("updatedAt", "")), reverse=True)
+
+# 'ACTIVE' 상태가 오래 남아 있는 데이터가 많아 상세링크가 죽는 문제가 있었음.
+# 실제 마지막 확인시각이 최근 14일 이내인 매물만 웹에 노출한다.
+now_dt = datetime.datetime.now(KST)
+fresh_cutoff = now_dt - datetime.timedelta(days=FRESH_DAYS)
+live = []
+for x in items:
+    if normalize_status(x.get("status")) not in {"ACTIVE", "RELISTED"}:
+        continue
+    last_seen = seen_at(x)
+    if last_seen is None or last_seen < fresh_cutoff:
+        continue
+    live.append(x)
+
+live.sort(key=lambda x: seen_at(x) or datetime.datetime.min.replace(tzinfo=KST), reverse=True)
 
 
 def complex_key(item):
@@ -160,13 +192,14 @@ for it in live:
     price = as_int(it.get("price", 0), 0)
     supply = as_float(it.get("areaSupplySqm", 0.0), 0.0)
     exclusive = as_float(it.get("areaExclusiveSqm", it.get("areaSqm", 0.0)), 0.0)
-    py = derive_pyeong(it)
     prices = price_map.get(complex_key(it), [])
     avg = round(sum(prices) / len(prices)) if prices else 0
     diff = ((price - avg) / avg * 100.0) if avg else 0.0
     signal = "급매" if diff <= -10 else ("저렴" if diff <= -5 else "보통")
     article_no = str(it.get("articleNo", "")).strip()
+    hscp_no = str(it.get("hscpNo", "")).strip()
     tags = normalize_tags(it.get("tagList", []))
+    last_seen = seen_at(it)
     rows.append({
         "city": city,
         "region": region,
@@ -181,14 +214,20 @@ for it in live:
         "signal": signal,
         "statusLabel": status_label(normalize_status(it.get("status"))),
         "priceBand": price_band(price),
-        "pyeongBand": pyeong_band(py),
+        "pyeongBand": pyeong_band(derive_pyeong(it)),
         "areaSupplySqmText": format_area_sqm(supply),
         "areaExclusiveSqmText": format_area_sqm(exclusive),
         "areaSupplyPyeong": (supply / 3.3058) if supply > 0 else 0.0,
         "areaSupplyPyeongText": format_area_pyeong(supply),
         "areaExclusivePyeongText": format_area_pyeong(exclusive),
         "floor": str(it.get("floor", "")),
-        "url": f"/article/info/{article_no}" if article_no else str(it.get("url", "")),
+        "articleNo": article_no,
+        "hscpNo": hscp_no,
+        "lastSeenAt": last_seen.isoformat() if last_seen else "",
+        # 2026년 현재도 모바일 매물 상세 URL 형식이 사용되고 있음.
+        "url": f"https://m.land.naver.com/article/info/{article_no}" if article_no else "",
+        # 상세 매물이 종료됐을 때 사용자가 단지 자체는 확인할 수 있도록 보조 링크도 저장.
+        "complexUrl": f"https://m.land.naver.com/complex/info/{hscp_no}" if hscp_no else "",
     })
 
 (PAGES / "report-data.json").write_text(
@@ -207,12 +246,13 @@ html = html.replace(
     '<option>12억 이상</option>',
     '<option>12~15억</option><option>15~20억</option><option>20~30억</option><option>30억 이상</option>',
 )
-now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).strftime("%Y-%m-%d %H:%M KST")
+# 기존 템플릿은 상대경로면 m.land.naver.com을 붙이므로, report-data.json에는 절대 상세 URL을 넣는다.
+now_text = now_dt.strftime("%Y-%m-%d %H:%M KST")
 html = re.sub(
     r"기준시각: [^/]+ / 노출 매물 [0-9,]+건 / 필터: [^<]+",
-    f"기준시각: {now} / 노출 매물 {len(rows):,}건 / 필터: 없음",
+    f"기준시각: {now_text} / 노출 매물 {len(rows):,}건 / 필터: 최근 {FRESH_DAYS}일 확인 매물",
     html,
     count=1,
 )
 index.write_text(html, encoding="utf-8")
-print(f"custom report built: {len(rows)} rows")
+print(f"custom report built: {len(rows)} fresh rows (cutoff={fresh_cutoff.isoformat()})")
