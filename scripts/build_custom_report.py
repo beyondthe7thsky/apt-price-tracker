@@ -211,7 +211,7 @@ for it in live:
         "hscpNo": hscp_no,
         "lastSeenAt": last_seen.isoformat() if last_seen else "",
         "url": f"https://m.land.naver.com/article/info/{article_no}" if article_no else "",
-        "complexUrl": f"https://m.land.naver.com/complex/info/{hscp_no}" if hscp_no else "",
+        "complexUrl": f"https://m.land.naver.com/complex/info/{hscp_no}?tradTpCd=A1&order=prc" if hscp_no else "",
     })
 
 (PAGES / "report-data.json").write_text(
@@ -231,14 +231,12 @@ html = html.replace(
     '<option>12~15억</option><option>15~20억</option><option>20~30억</option><option>30억 이상</option>',
 )
 
-# 상세 매물 링크가 네이버 개편/종료 매물 때문에 열리지 않을 때를 대비해
-# 동일 단지의 네이버 부동산 페이지와 매물번호를 함께 제공한다.
 old_full = "const fullUrl=(u)=>{const t=String(u??'').trim(); if(!t) return '#'; return t.startsWith('/') ? `https://m.land.naver.com${t}` : t;};"
-new_full = "const fullUrl=(u)=>{const t=String(u??'').trim(); if(!t) return '#'; return t.startsWith('/') ? `https://m.land.naver.com${t}` : t;}; const complexUrl=(row)=>{const t=String(row?.complexUrl??'').trim(); if(t)return t; const h=String(row?.hscpNo??'').trim(); return h?`https://m.land.naver.com/complex/info/${h}`:'#';};"
+new_full = "const fullUrl=(u)=>{const t=String(u??'').trim(); if(!t) return '#'; return t.startsWith('/') ? `https://m.land.naver.com${t}` : t;}; const complexUrl=(row)=>{const t=String(row?.complexUrl??'').trim(); if(t)return t; const h=String(row?.hscpNo??'').trim(); return h?`https://m.land.naver.com/complex/info/${h}?tradTpCd=A1&order=prc`:'#';};"
 html = html.replace(old_full, new_full)
 
 old_cell = '<td data-label="매물" class="link-col"><a href="${esc(fullUrl(it.url))}" target="_blank">상세보기</a></td><td data-label="지도" class="link-col"><a href="${esc(mapUrl(it))}" target="_blank">지도</a></td>'
-new_cell = '<td data-label="매물" class="link-col"><a href="${esc(fullUrl(it.url))}" target="_blank" rel="noopener">상세보기</a><br><a href="${esc(complexUrl(it))}" target="_blank" rel="noopener">단지매물</a><br><span class="dim" style="font-size:11px">No.${esc(it.articleNo||\'-\')}</span></td><td data-label="지도" class="link-col"><a href="${esc(mapUrl(it))}" target="_blank">지도</a></td>'
+new_cell = '<td data-label="매물" class="link-col"><a href="${esc(fullUrl(it.url))}" target="_blank" rel="noopener">상세보기</a><br><a href="${esc(complexUrl(it))}" target="_blank" rel="noopener">단지매물(매매·낮은가격순)</a><br><span class="dim" style="font-size:11px">No.${esc(it.articleNo||\'-\')}</span></td><td data-label="지도" class="link-col"><a href="${esc(mapUrl(it))}" target="_blank">지도</a></td>'
 if old_cell not in html:
     raise SystemExit("listing link cell template not found")
 html = html.replace(old_cell, new_cell, 1)
@@ -251,4 +249,4 @@ html = re.sub(
     count=1,
 )
 index.write_text(html, encoding="utf-8")
-print(f"custom report built: {len(rows)} rows with direct+complex links")
+print(f"custom report built: {len(rows)} rows with sale+price-order complex links")
