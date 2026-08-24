@@ -8,7 +8,6 @@ DATA = ROOT / "data"
 PAGES = ROOT / "pages"
 PAGES.mkdir(parents=True, exist_ok=True)
 KST = datetime.timezone(datetime.timedelta(hours=9))
-FRESH_DAYS = 14
 
 
 def as_int(v, default=0):
@@ -156,19 +155,8 @@ for item in raw:
 items = list(merged.values()) + no_key
 items = [x for x in items if 20.0 <= derive_pyeong(x) <= 39.999]
 
-# 'ACTIVE' 상태가 오래 남아 있는 데이터가 많아 상세링크가 죽는 문제가 있었음.
-# 실제 마지막 확인시각이 최근 14일 이내인 매물만 웹에 노출한다.
-now_dt = datetime.datetime.now(KST)
-fresh_cutoff = now_dt - datetime.timedelta(days=FRESH_DAYS)
-live = []
-for x in items:
-    if normalize_status(x.get("status")) not in {"ACTIVE", "RELISTED"}:
-        continue
-    last_seen = seen_at(x)
-    if last_seen is None or last_seen < fresh_cutoff:
-        continue
-    live.append(x)
-
+# 날짜 기준으로 잘라내지 않고, 저장된 상태가 판매중/재등록인 매물은 모두 다시 노출한다.
+live = [x for x in items if normalize_status(x.get("status")) in {"ACTIVE", "RELISTED"}]
 live.sort(key=lambda x: seen_at(x) or datetime.datetime.min.replace(tzinfo=KST), reverse=True)
 
 
@@ -224,9 +212,7 @@ for it in live:
         "articleNo": article_no,
         "hscpNo": hscp_no,
         "lastSeenAt": last_seen.isoformat() if last_seen else "",
-        # 2026년 현재도 모바일 매물 상세 URL 형식이 사용되고 있음.
         "url": f"https://m.land.naver.com/article/info/{article_no}" if article_no else "",
-        # 상세 매물이 종료됐을 때 사용자가 단지 자체는 확인할 수 있도록 보조 링크도 저장.
         "complexUrl": f"https://m.land.naver.com/complex/info/{hscp_no}" if hscp_no else "",
     })
 
@@ -246,13 +232,12 @@ html = html.replace(
     '<option>12억 이상</option>',
     '<option>12~15억</option><option>15~20억</option><option>20~30억</option><option>30억 이상</option>',
 )
-# 기존 템플릿은 상대경로면 m.land.naver.com을 붙이므로, report-data.json에는 절대 상세 URL을 넣는다.
-now_text = now_dt.strftime("%Y-%m-%d %H:%M KST")
+now_text = datetime.datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
 html = re.sub(
     r"기준시각: [^/]+ / 노출 매물 [0-9,]+건 / 필터: [^<]+",
-    f"기준시각: {now_text} / 노출 매물 {len(rows):,}건 / 필터: 최근 {FRESH_DAYS}일 확인 매물",
+    f"기준시각: {now_text} / 노출 매물 {len(rows):,}건 / 필터: 없음",
     html,
     count=1,
 )
 index.write_text(html, encoding="utf-8")
-print(f"custom report built: {len(rows)} fresh rows (cutoff={fresh_cutoff.isoformat()})")
+print(f"custom report built: {len(rows)} rows")
