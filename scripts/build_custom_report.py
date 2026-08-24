@@ -154,8 +154,6 @@ for item in raw:
 
 items = list(merged.values()) + no_key
 items = [x for x in items if 20.0 <= derive_pyeong(x) <= 39.999]
-
-# 날짜 기준으로 잘라내지 않고, 저장된 상태가 판매중/재등록인 매물은 모두 다시 노출한다.
 live = [x for x in items if normalize_status(x.get("status")) in {"ACTIVE", "RELISTED"}]
 live.sort(key=lambda x: seen_at(x) or datetime.datetime.min.replace(tzinfo=KST), reverse=True)
 
@@ -232,6 +230,19 @@ html = html.replace(
     '<option>12억 이상</option>',
     '<option>12~15억</option><option>15~20억</option><option>20~30억</option><option>30억 이상</option>',
 )
+
+# 상세 매물 링크가 네이버 개편/종료 매물 때문에 열리지 않을 때를 대비해
+# 동일 단지의 네이버 부동산 페이지와 매물번호를 함께 제공한다.
+old_full = "const fullUrl=(u)=>{const t=String(u??'').trim(); if(!t) return '#'; return t.startsWith('/') ? `https://m.land.naver.com${t}` : t;};"
+new_full = "const fullUrl=(u)=>{const t=String(u??'').trim(); if(!t) return '#'; return t.startsWith('/') ? `https://m.land.naver.com${t}` : t;}; const complexUrl=(row)=>{const t=String(row?.complexUrl??'').trim(); if(t)return t; const h=String(row?.hscpNo??'').trim(); return h?`https://m.land.naver.com/complex/info/${h}`:'#';};"
+html = html.replace(old_full, new_full)
+
+old_cell = '<td data-label="매물" class="link-col"><a href="${esc(fullUrl(it.url))}" target="_blank">상세보기</a></td><td data-label="지도" class="link-col"><a href="${esc(mapUrl(it))}" target="_blank">지도</a></td>'
+new_cell = '<td data-label="매물" class="link-col"><a href="${esc(fullUrl(it.url))}" target="_blank" rel="noopener">상세보기</a><br><a href="${esc(complexUrl(it))}" target="_blank" rel="noopener">단지매물</a><br><span class="dim" style="font-size:11px">No.${esc(it.articleNo||\'-\')}</span></td><td data-label="지도" class="link-col"><a href="${esc(mapUrl(it))}" target="_blank">지도</a></td>'
+if old_cell not in html:
+    raise SystemExit("listing link cell template not found")
+html = html.replace(old_cell, new_cell, 1)
+
 now_text = datetime.datetime.now(KST).strftime("%Y-%m-%d %H:%M KST")
 html = re.sub(
     r"기준시각: [^/]+ / 노출 매물 [0-9,]+건 / 필터: [^<]+",
@@ -240,4 +251,4 @@ html = re.sub(
     count=1,
 )
 index.write_text(html, encoding="utf-8")
-print(f"custom report built: {len(rows)} rows")
+print(f"custom report built: {len(rows)} rows with direct+complex links")
