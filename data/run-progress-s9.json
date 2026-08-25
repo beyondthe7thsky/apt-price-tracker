@@ -1,8 +1,8 @@
 {
   "nextStartRegionOffset" : 0,
   "totalRegions" : 37,
-  "lastRunAt" : "2026-04-21T15:58:52.821974",
-  "lastRegionName" : "서울송파_마천동",
-  "reason" : "SUCCESS",
-  "blockedRegionName" : null
+  "lastRunAt" : "2026-08-25T09:00:52.637363",
+  "lastRegionName" : "서울강남_역삼동",
+  "reason" : "DATA_ISSUE_NO_SUCCESS",
+  "blockedRegionName" : "서울강남_역삼동"
 }
