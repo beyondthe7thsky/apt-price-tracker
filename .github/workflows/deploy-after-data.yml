@@ -1,0 +1,29 @@
+name: deploy report after data update
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "data/apt-listings*.json"
+      - "data/run-progress*.json"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+concurrency:
+  group: deploy-report-after-data
+  cancel-in-progress: true
+
+jobs:
+  dispatch-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch report deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run send-teams-from-json.yml \
+            --repo "${GITHUB_REPOSITORY}" \
+            --ref main
