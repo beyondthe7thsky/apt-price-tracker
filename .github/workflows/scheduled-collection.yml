@@ -1,0 +1,90 @@
+name: scheduled apt collection
+
+on:
+  schedule:
+    # 평일 KST 06:10~자정, 약 2시간 간격으로 샤드 1~10 실행
+    - cron: "10 21 * * 0-4"
+    - cron: "10 23 * * 0-4"
+    - cron: "10 1 * * 1-5"
+    - cron: "10 3 * * 1-5"
+    - cron: "10 5 * * 1-5"
+    - cron: "10 7 * * 1-5"
+    - cron: "10 9 * * 1-5"
+    - cron: "10 11 * * 1-5"
+    - cron: "10 13 * * 1-5"
+    - cron: "10 15 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      shard:
+        description: "수동 실행할 지역 그룹"
+        required: true
+        default: "1"
+        type: choice
+        options:
+          - "1"
+          - "2"
+          - "3"
+          - "4"
+          - "5"
+          - "6"
+          - "7"
+          - "8"
+          - "9"
+          - "10"
+
+permissions:
+  actions: write
+
+concurrency:
+  group: scheduled-apt-collection
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Select shard and dispatch collector
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule || '' }}
+          INPUT_SHARD: ${{ inputs.shard || '1' }}
+        run: |
+          if [[ "${EVENT_NAME}" == "schedule" ]]; then
+            case "${EVENT_SCHEDULE}" in
+              "10 21 * * 0-4") shard="1" ;;
+              "10 23 * * 0-4") shard="2" ;;
+              "10 1 * * 1-5") shard="3" ;;
+              "10 3 * * 1-5") shard="4" ;;
+              "10 5 * * 1-5") shard="5" ;;
+              "10 7 * * 1-5") shard="6" ;;
+              "10 9 * * 1-5") shard="7" ;;
+              "10 11 * * 1-5") shard="8" ;;
+              "10 13 * * 1-5") shard="9" ;;
+              "10 15 * * 1-5") shard="10" ;;
+              *) shard="1" ;;
+            esac
+          else
+            shard="${INPUT_SHARD}"
+          fi
+
+          case "${shard}" in
+            1) scope="1) 수원시 (영통구, 광교, 화서)" ;;
+            2) scope="2) 용인시 수지구" ;;
+            3) scope="3) 서울 마용성" ;;
+            4) scope="4) 서울 서남권" ;;
+            5) scope="5) 서울 남부" ;;
+            6) scope="6) 서울 동부/서북권" ;;
+            7) scope="7) 성남 전역" ;;
+            8) scope="8) 안양권" ;;
+            9) scope="9) 서울 강남3구" ;;
+            10) scope="10) 서울 노도강" ;;
+            *) echo "Invalid shard: ${shard}"; exit 1 ;;
+          esac
+
+          echo "Dispatching shard ${shard}: ${scope}"
+          gh workflow run apt-price-bot.yml \
+            --repo "${GITHUB_REPOSITORY}" \
+            --ref main \
+            -f region_scope="${scope}" \
+            -f commit_data="true"
